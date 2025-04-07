@@ -252,11 +252,12 @@ class SmartCategoriesGrid {
     <?php }
 
     public function hover_effect_field() {
-        $checked = isset($this->settings['hover_effect']) ? 'checked' : ''; ?>
+        $checked = isset($this->settings['hover_effect']) && 1 === $this->settings['hover_effect'] ? 'checked' : ''; ?>
         <label>
             <input type="checkbox" 
-                   name="scg_settings[hover_effect]" 
-                   <?= $checked ?>> 
+               name="scg_settings[hover_effect]" 
+               value="1" 
+               <?= $checked ?>> 
             <?php _e('Enable hover effects', 'smart-cat-grid') ?>
         </label>
     <?php }
