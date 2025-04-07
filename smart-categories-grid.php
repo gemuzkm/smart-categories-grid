@@ -287,6 +287,8 @@ class SmartCategoriesGrid {
         
         $output['hover_effect'] = isset($input['hover_effect']) ? 1 : 0;
         
+        wp_cache_delete('scg_settings', 'options');
+       
         $this->clear_all_cache();
         
         return $output;
@@ -294,11 +296,16 @@ class SmartCategoriesGrid {
 
     private function clear_all_cache() {
         global $wpdb;
-        $wpdb->query(
-            "DELETE FROM {$wpdb->options} 
-            WHERE option_name LIKE '\_transient\_scg\_cache\_%' 
-            OR option_name LIKE '\_transient\_timeout\_scg\_cache\_%'"
+        
+        $transients = $wpdb->get_col(
+            "SELECT option_name FROM {$wpdb->options} 
+            WHERE option_name LIKE '_transient_scg_cache_%'"
         );
+        
+        foreach ($transients as $transient) {
+            $transient_name = str_replace('_transient_', '', $transient);
+            delete_transient($transient_name);
+        }
     }
 
     public function admin_assets($hook) {
