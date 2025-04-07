@@ -1,5 +1,4 @@
 jQuery(document).ready(function($) {
-    // Проверяем наличие необходимых элементов
     const init = () => {
         // Media Uploader
         $('.scg-upload-image').off('click').on('click', handleMediaUpload);
@@ -70,7 +69,9 @@ jQuery(document).ready(function($) {
         }, 5000);
     };
 
+    // Initialization
     init();
     
+    // Re-init after AJAX
     $(document).ajaxComplete(() => init());
 });

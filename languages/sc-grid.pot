@@ -53,5 +53,5 @@ msgstr ""
 msgid "Use This Image"
 msgstr ""
 
-msgid "Cache clear failed"
+msgid "Failed to clear cache"
 msgstr ""
