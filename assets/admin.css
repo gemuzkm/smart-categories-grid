@@ -17,6 +17,16 @@
     margin-left: 10px !important;
 }
 
+.scg-cache-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.scg-cache-controls select {
+    width: 200px;
+}
+
 #scg-clear-cache {
     margin-left: 15px;
     background: #d63638;

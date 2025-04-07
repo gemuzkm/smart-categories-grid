@@ -131,14 +131,6 @@ class SmartCategoriesGrid {
                 do_settings_sections('scg-settings');
                 submit_button(__('Save Changes', 'smart-cat-grid')); 
                 ?>
-                
-                <div id="scg-additional-buttons">
-                    <button type="button" 
-                            class="button button-danger" 
-                            id="scg-clear-cache">
-                        <?php esc_html_e('Clear Cache', 'smart-cat-grid') ?>
-                    </button>
-                </div>
             </form>
         </div>
     <?php }
@@ -223,13 +215,23 @@ class SmartCategoriesGrid {
 
     public function cache_time_field() {
         $value = $this->settings['cache_time'] ?? DAY_IN_SECONDS; ?>
-        <select name="scg_settings[cache_time]">
-            <option value="3600" <?php selected($value, 3600) ?>><?php _e('1 Hour', 'smart-cat-grid') ?></option>
-            <option value="43200" <?php selected($value, 43200) ?>><?php _e('12 Hours', 'smart-cat-grid') ?></option>
-            <option value="86400" <?php selected($value, 86400) ?>><?php _e('1 Day', 'smart-cat-grid') ?></option>
-            <option value="604800" <?php selected($value, 604800) ?>><?php _e('1 Week', 'smart-cat-grid') ?></option>
-            <option value="0" <?php selected($value, 0) ?>><?php _e('No Caching', 'smart-cat-grid') ?></option>
-        </select>
+        <div class="scg-cache-controls">
+            <select name="scg_settings[cache_time]">
+                <option value="3600" <?php selected($value, 3600) ?>><?php _e('1 Hour', 'smart-cat-grid') ?></option>
+                <option value="43200" <?php selected($value, 43200) ?>><?php _e('12 Hours', 'smart-cat-grid') ?></option>
+                <option value="86400" <?php selected($value, 86400) ?>><?php _e('1 Day', 'smart-cat-grid') ?></option>
+                <option value="604800" <?php selected($value, 604800) ?>><?php _e('1 Week', 'smart-cat-grid') ?></option>
+                <option value="0" <?php selected($value, 0) ?>><?php _e('No Caching', 'smart-cat-grid') ?></option>
+            </select>
+            
+            <button type="button" 
+                    class="button button-danger" 
+                    id="scg-clear-cache"
+                    style="margin-left: 10px; vertical-align: middle">
+                <?php esc_html_e('Clear Cache Now', 'smart-cat-grid') ?>
+            </button>
+        </div>
+        <p class="description"><?php _e('Cache will be automatically cleared when settings are updated', 'smart-cat-grid') ?></p>
     <?php }
 
     public function columns_field() {
