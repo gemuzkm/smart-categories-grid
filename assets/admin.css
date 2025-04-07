@@ -1,0 +1,43 @@
+/* Settings Page */
+.scg-settings-wrap .form-table th {
+    width: 300px;
+    padding-left: 10px;
+}
+
+.scg-settings-wrap .form-table td {
+    padding: 15px 10px;
+}
+
+.scg-settings-wrap .regular-text {
+    width: 400px;
+    max-width: 100%;
+}
+
+.scg-upload-image {
+    margin-left: 10px !important;
+}
+
+#scg-clear-cache {
+    margin-left: 15px;
+    background: #d63638;
+    border-color: #d63638;
+    color: #fff;
+    vertical-align: middle;
+}
+
+#scg-clear-cache:hover {
+    background: #b32d2e;
+    border-color: #b32d2e;
+}
+
+.scg-settings-section {
+    background: #fff;
+    padding: 20px;
+    margin: 20px 0;
+    border-radius: 4px;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+}
+
+.notice-success.scg-notice {
+    margin: 15px 0;
+}
