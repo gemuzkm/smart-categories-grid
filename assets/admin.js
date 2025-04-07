@@ -1,6 +1,14 @@
 jQuery(document).ready(function($) {
-    // Media Uploader
-    $('.scg-upload-image').on('click', function(e) {
+    // Проверяем наличие необходимых элементов
+    const init = () => {
+        // Media Uploader
+        $('.scg-upload-image').off('click').on('click', handleMediaUpload);
+        
+        // Clear Cache
+        $('#scg-clear-cache').off('click').on('click', handleClearCache);
+    };
+
+    const handleMediaUpload = function(e) {
         e.preventDefault();
         const button = $(this);
         
@@ -10,16 +18,15 @@ jQuery(document).ready(function($) {
             multiple: false
         });
         
-        frame.on('select', function() {
+        frame.on('select', () => {
             const attachment = frame.state().get('selection').first().toJSON();
             button.siblings('input').val(attachment.url).trigger('change');
         });
         
         frame.open();
-    });
+    };
 
-    // Clear Cache
-    $('#scg-clear-cache').on('click', function(e) {
+    const handleClearCache = function(e) {
         e.preventDefault();
         const button = $(this);
         
@@ -32,27 +39,28 @@ jQuery(document).ready(function($) {
                 action: 'scg_clear_cache',
                 nonce: scg_admin.nonce
             },
-            beforeSend: function() {
+            beforeSend: () => {
                 button.prop('disabled', true).text(scg_admin.i18n.clearing);
             },
-            success: function(response) {
+            success: (response) => {
                 showAdminNotice(response.success ? 'success' : 'error', response.data.message);
             },
-            error: function() {
-                showAdminNotice('error', scg_admin.i18n.error);
+            error: () => {
+                showAdminNotice('error', scg_admin.i18n.clear_failed);
             },
-            complete: function() {
+            complete: () => {
                 button.prop('disabled', false).text(scg_admin.i18n.clear_cache);
             }
         });
-    });
+    };
 
-    // Show Admin Notices
-    function showAdminNotice(type, message) {
+    const showAdminNotice = (type, message) => {
+        $('.notice.scg-notice').remove();
+        
         const notice = $(
-            '<div class="notice notice-' + type + ' is-dismissible">' +
-                '<p>' + message + '</p>' +
-            '</div>'
+            `<div class="notice notice-${type} scg-notice is-dismissible">
+                <p>${message}</p>
+            </div>`
         );
         
         $('.scg-settings-wrap h1').after(notice);
@@ -60,5 +68,9 @@ jQuery(document).ready(function($) {
         setTimeout(() => {
             notice.fadeOut(500, () => notice.remove());
         }, 5000);
-    }
+    };
+
+    init();
+    
+    $(document).ajaxComplete(() => init());
 });

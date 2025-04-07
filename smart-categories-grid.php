@@ -27,7 +27,6 @@ class SmartCategoriesGrid {
         add_action('admin_init', [$this, 'register_settings']);
         add_action('admin_enqueue_scripts', [$this, 'admin_assets']);
         add_action('wp_enqueue_scripts', [$this, 'frontend_assets']);
-        add_action('admin_notices', [$this, 'admin_notices']);
         
         add_action('wp_ajax_scg_clear_cache', [$this, 'ajax_clear_cache']);
     }
@@ -132,6 +131,14 @@ class SmartCategoriesGrid {
                 do_settings_sections('scg-settings');
                 submit_button(__('Save Changes', 'smart-cat-grid')); 
                 ?>
+                
+                <div id="scg-additional-buttons">
+                    <button type="button" 
+                            class="button button-danger" 
+                            id="scg-clear-cache">
+                        <?php esc_html_e('Clear Cache', 'smart-cat-grid') ?>
+                    </button>
+                </div>
             </form>
         </div>
     <?php }
@@ -223,9 +230,6 @@ class SmartCategoriesGrid {
             <option value="604800" <?php selected($value, 604800) ?>><?php _e('1 Week', 'smart-cat-grid') ?></option>
             <option value="0" <?php selected($value, 0) ?>><?php _e('No Caching', 'smart-cat-grid') ?></option>
         </select>
-        <button type="button" class="button" id="scg-clear-cache">
-            <?php _e('Clear Cache Now', 'smart-cat-grid') ?>
-        </button>
     <?php }
 
     public function columns_field() {
@@ -268,23 +272,34 @@ class SmartCategoriesGrid {
     <?php }
 
     public function validate_settings($input) {
-    $output = [];
-    
-    // Validate numbers
-    $output['default_category'] = absint($input['default_category']);
-    $output['cache_time'] = absint($input['cache_time']);
-    $output['columns'] = in_array($input['columns'], [2,3,4,6]) ? $input['columns'] : 6;
-    
-    // Исправленная строка:
-    $output['image_radius'] = max(0, min(50, absint($input['image_radius'])));
-    
-    // Validate URLs
-    $output['default_image'] = esc_url_raw($input['default_image']);
-    
-    // Checkboxes
-    $output['hover_effect'] = isset($input['hover_effect']) ? 1 : 0;
-    
-    return $output;
+        $output = [];
+        
+        // Validate numbers
+        $output['default_category'] = isset($input['default_category']) 
+            ? absint($input['default_category']) 
+            : 0;
+        
+        $output['cache_time'] = isset($input['cache_time'])
+            ? absint($input['cache_time'])
+            : DAY_IN_SECONDS;
+        
+        $output['columns'] = isset($input['columns']) && in_array($input['columns'], [2,3,4,6]) 
+            ? $input['columns'] 
+            : 6;
+        
+        $output['image_radius'] = isset($input['image_radius'])
+            ? max(0, min(50, absint($input['image_radius'])))
+            : 3;
+        
+        // Validate URLs
+        $output['default_image'] = isset($input['default_image'])
+            ? esc_url_raw($input['default_image'])
+            : '';
+        
+        // Checkboxes
+        $output['hover_effect'] = isset($input['hover_effect']) ? 1 : 0;
+        
+        return $output;
     }
 
     public function admin_assets($hook) {
@@ -301,7 +316,7 @@ class SmartCategoriesGrid {
         wp_enqueue_script(
             'scg-admin',
             plugins_url('assets/admin.js', __FILE__),
-            ['jquery'],
+            ['jquery', 'wp-i18n'],
             filemtime(plugin_dir_path(__FILE__) . 'assets/admin.js'),
             true
         );
@@ -309,9 +324,13 @@ class SmartCategoriesGrid {
         wp_localize_script('scg-admin', 'scg_admin', [
             'nonce' => wp_create_nonce('scg-clear-cache'),
             'i18n' => [
-                'clear_confirm' => __('Are you sure you want to clear all cache?', 'smart-cat-grid'),
-                'cleared' => __('Cache cleared successfully!', 'smart-cat-grid'),
-                'error' => __('Error clearing cache', 'smart-cat-grid')
+                'clear_confirm' => __('Are you sure?', 'smart-cat-grid'),
+                'clearing' => __('Clearing...', 'smart-cat-grid'),
+                'clear_cache' => __('Clear Cache', 'smart-cat-grid'),
+                'upload_title' => __('Select Image', 'smart-cat-grid'),
+                'use_image' => __('Use This Image', 'smart-cat-grid'),
+                'settings_saved' => __('Settings saved successfully!', 'smart-cat-grid'),
+                'clear_failed' => __('Failed to clear cache', 'smart-cat-grid')
             ]
         ]);
     }
@@ -325,36 +344,20 @@ class SmartCategoriesGrid {
         );
     }
 
-    public function admin_notices() {
-        if(!empty($_GET['scg-cache-cleared'])) : ?>
-            <div class="notice notice-success is-dismissible">
-                <p><?php _e('Cache cleared successfully!', 'smart-cat-grid') ?></p>
-            </div>
-        <?php endif;
-    }
-
     public function ajax_clear_cache() {
         check_ajax_referer('scg-clear-cache', 'nonce');
         
         global $wpdb;
-        $deleted = $wpdb->query("
-            DELETE FROM {$wpdb->options} 
-            WHERE option_name LIKE '_transient_{$this->cache_prefix}%'
-        ");
+        $deleted = $wpdb->query(
+            "DELETE FROM {$wpdb->options} 
+             WHERE option_name LIKE '_transient_{$this->cache_prefix}%'"
+        );
         
         if(false !== $deleted) {
             wp_send_json_success(['message' => __('Cache cleared successfully!', 'smart-cat-grid')]);
         }
         
         wp_send_json_error(['message' => __('Error clearing cache', 'smart-cat-grid')]);
-    }
-
-    public function clear_cache() {
-        global $wpdb;
-        $wpdb->query("
-            DELETE FROM {$wpdb->options} 
-            WHERE option_name LIKE '_transient_{$this->cache_prefix}%'
-        ");
     }
 }
 

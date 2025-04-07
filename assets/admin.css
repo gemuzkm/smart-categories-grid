@@ -38,6 +38,12 @@
     box-shadow: 0 1px 1px rgba(0,0,0,.04);
 }
 
-.notice-success.scg-notice {
-    margin: 15px 0;
+.scg-notice {
+    margin: 15px 0 !important;
+    animation: scgFadeIn 0.3s ease;
+}
+
+@keyframes scgFadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
