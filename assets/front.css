@@ -2,9 +2,7 @@
 .scg-grid {
     display: grid;
     gap: 20px 15px;
-    margin: 0 auto;
-    max-width: 1200px;
-    padding: 20px 0;
+    grid-template-columns: repeat(var(--scg-columns, 6), 1fr);
 }
 
 .scg-col {
@@ -22,10 +20,13 @@
     z-index: 1;
 }
 
+.scg-card.has-hover {
+    transition: all 0.3s ease;
+}
+
 .scg-card.has-hover:hover {
     transform: translateY(-3px);
     box-shadow: 0 4px 15px rgba(0,0,0,0.15);
-    z-index: 2;
 }
 
 .scg-image {
@@ -61,14 +62,13 @@
 /* Responsive Grid */
 @media (max-width: 767px) {
     .scg-grid {
-        grid-template-columns: repeat(2, 1fr);
-        padding: 10px;
+        grid-template-columns: repeat(2, 1fr) !important;
     }
 }
 
 @media (min-width: 768px) and (max-width: 1024px) {
     .scg-grid {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(3, 1fr) !important;
     }
 }
 
@@ -76,4 +76,8 @@
     .scg-grid {
         grid-template-columns: repeat(var(--scg-columns, 6), 1fr);
     }
+}
+
+.scg-grid {
+    --scg-columns: 6; /* default */
 }
