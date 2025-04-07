@@ -3,7 +3,7 @@
 Plugin Name: Smart Categories Grid
 Description: Responsive category grid with caching and advanced settings
 Version: 1.3
-Author: Your Name
+Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
 */
