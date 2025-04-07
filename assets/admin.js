@@ -1,9 +1,6 @@
 jQuery(document).ready(function($) {
     const init = () => {
-        // Media Uploader
         $('.scg-upload-image').off('click').on('click', handleMediaUpload);
-        
-        // Clear Cache
         $('#scg-clear-cache').off('click').on('click', handleClearCache);
     };
 
@@ -69,9 +66,7 @@ jQuery(document).ready(function($) {
         }, 5000);
     };
 
-    // Initialization
     init();
     
-    // Re-init after AJAX
     $(document).ajaxComplete(() => init());
 });
