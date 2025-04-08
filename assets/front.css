@@ -1,75 +1,33 @@
-/**
- * Smart Categories Grid - Frontend Styles
- * 
- * Contents:
- * 1. CSS Custom Properties
- * 2. Grid Layout
- * 3. Card Component
- * 4. Image Styles
- * 5. Typography
- * 6. Responsive Breakpoints
- */
-
-/* 1. CSS Custom Properties
-   ========================================================================== */
-:root {
-    --scg-columns: 6;
-    --scg-image-radius: 3px;
-    --scg-gap-y: 20px;
-    --scg-gap-x: 15px;
-    --scg-card-padding: 10px;
-    --scg-shadow-normal: 0 2px 5px rgba(0,0,0,0.1);
-    --scg-shadow-hover: 0 4px 15px rgba(0,0,0,0.15);
-    --scg-transition: all 0.3s ease;
-    --scg-title-color: #333;
-    --scg-title-hover: #0073aa;
-    --scg-bg-light: #f5f5f5;
-}
-
-/* 2. Grid Layout
-   ========================================================================== */
 .scg-grid {
     display: grid;
-    gap: var(--scg-gap-y) var(--scg-gap-x);
-    grid-template-columns: repeat(var(--scg-columns), 1fr);
-    width: 100%;
-    max-width: 100%;
+    gap: 20px 15px;
+    grid-template-columns: repeat(var(--scg-columns, 6), 1fr);
 }
 
 .scg-col {
     position: relative;
     break-inside: avoid;
-    page-break-inside: avoid; /* Legacy support */
 }
 
-/* 3. Card Component
-   ========================================================================== */
 .scg-card {
-    background-color: #fff;
+    background: #fff;
     border-radius: 3px;
-    padding: var(--scg-card-padding);
-    transition: var(--scg-transition);
-    box-shadow: var(--scg-shadow-normal);
+    padding: 10px;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     position: relative;
     z-index: 1;
-    /* Prevent text selection during hover animation */
-    user-select: none;
 }
 
-/* Optimized hover effects */
 .scg-card.has-hover {
-    transform: translateZ(0); /* Hardware acceleration */
-    backface-visibility: hidden;
-    will-change: transform, box-shadow;
+    transition: all 0.3s ease;
 }
 
 .scg-card.has-hover:hover {
     transform: translateY(-3px);
-    box-shadow: var(--scg-shadow-hover);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
 }
 
-/* 4. Image Styles
-   ========================================================================== */
 .scg-image {
     display: block;
     text-align: center;
@@ -77,53 +35,32 @@
 }
 
 .scg-image img {
-    border-radius: var(--scg-image-radius);
+    border-radius: var(--scg-image-radius, 3px);
     width: 120px;
     height: 96px;
     object-fit: cover;
-    background-color: var(--scg-bg-light);
-    /* Prevent layout shift during loading */
-    aspect-ratio: 5/4;
-    /* Optimize image rendering */
-    image-rendering: optimizeQuality;
+    background: #f5f5f5;
 }
 
-/* 5. Typography
-   ========================================================================== */
 .scg-title {
     text-align: center;
     margin: 10px 0 0;
     font-size: 16px;
     line-height: 1.4;
-    /* Prevent long titles from breaking layout */
-    overflow-wrap: break-word;
-    word-wrap: break-word;
-    hyphens: auto;
 }
 
 .scg-title a {
-    color: var(--scg-title-color);
+    color: #333;
     text-decoration: none;
-    /* Smoother link transitions */
-    transition: color 0.2s ease;
 }
 
 .scg-title a:hover {
-    color: var(--scg-title-hover);
+    color: #0073aa;
 }
 
-/* 6. Responsive Breakpoints
-   ========================================================================== */
 @media (max-width: 767px) {
     .scg-grid {
         grid-template-columns: repeat(2, 1fr) !important;
-        gap: 15px 10px; /* Reduced gap for mobile */
-    }
-    
-    /* Optimize for mobile performance */
-    .scg-card.has-hover {
-        transform: none !important;
-        box-shadow: var(--scg-shadow-normal) !important;
     }
 }
 
@@ -133,20 +70,12 @@
     }
 }
 
-/* Print styles for better document printing */
-@media print {
+@media (min-width: 1025px) {
     .scg-grid {
-        display: block;
+        grid-template-columns: repeat(var(--scg-columns, 6), 1fr);
     }
-    
-    .scg-col {
-        page-break-inside: avoid;
-        break-inside: avoid;
-        margin-bottom: 20px;
-    }
-    
-    .scg-card {
-        box-shadow: none;
-        border: 1px solid #ddd;
-    }
+}
+
+.scg-grid {
+    --scg-columns: 6; /* default */
 }
