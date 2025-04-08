@@ -88,18 +88,6 @@ A powerful WordPress plugin for creating responsive category grids with advanced
 - WordPress 5.0+
 - MySQL 5.6+ or MariaDB 10.0+
 
-### Setup Development Environment
-```bash
-# Clone repository
-git clone https://github.com/your-username/smart-categories-grid.git
-
-# Install dependencies
-composer install
-
-# Build assets
-npm install && npm run build
-```
-
 ### Directory Structure
 ```
 smart-categories-grid/
