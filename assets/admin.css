@@ -1,57 +1,94 @@
+/**
+ * Smart Categories Grid - Admin Styles
+ * 
+ * Contents:
+ * 1. Settings Form Layout
+ * 2. Control Elements
+ * 3. Cache Controls
+ * 4. Section Containers
+ * 5. Notifications
+ * 6. Animations
+ */
+
+/* 1. Settings Form Layout
+   ========================================================================== */
+:root {
+    --scg-admin-spacing: 10px;
+    --scg-admin-width-th: 300px;
+    --scg-admin-width-input: 400px;
+    --scg-admin-danger: #d63638;
+    --scg-admin-danger-hover: #b32d2e;
+    --scg-admin-shadow: 0 1px 1px rgba(0,0,0,.04);
+    --scg-admin-radius: 4px;
+    --scg-admin-animation: 0.3s ease;
+}
+
 .scg-settings-wrap .form-table th {
-    width: 300px;
-    padding-left: 10px;
+    width: var(--scg-admin-width-th);
+    padding-left: var(--scg-admin-spacing);
 }
 
 .scg-settings-wrap .form-table td {
-    padding: 15px 10px;
+    padding: calc(var(--scg-admin-spacing) * 1.5) var(--scg-admin-spacing);
 }
 
+/* 2. Control Elements
+   ========================================================================== */
 .scg-settings-wrap .regular-text {
-    width: 400px;
+    width: var(--scg-admin-width-input);
     max-width: 100%;
 }
 
 .scg-upload-image {
-    margin-left: 10px !important;
+    margin-left: var(--scg-admin-spacing) !important;
 }
 
+/* 3. Cache Controls
+   ========================================================================== */
 .scg-cache-controls {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--scg-admin-spacing);
 }
 
 .scg-cache-controls select {
     width: 200px;
 }
 
+/* Clear cache button styling */
 #scg-clear-cache {
-    margin-left: 15px;
-    background: #d63638;
-    border-color: #d63638;
+    margin-left: calc(var(--scg-admin-spacing) * 1.5);
+    background: var(--scg-admin-danger);
+    border-color: var(--scg-admin-danger);
     color: #fff;
     vertical-align: middle;
+    transition: all var(--scg-admin-animation);
 }
 
 #scg-clear-cache:hover {
-    background: #b32d2e;
-    border-color: #b32d2e;
+    background: var(--scg-admin-danger-hover);
+    border-color: var(--scg-admin-danger-hover);
 }
 
+/* 4. Section Containers
+   ========================================================================== */
 .scg-settings-section {
     background: #fff;
-    padding: 20px;
-    margin: 20px 0;
-    border-radius: 4px;
-    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    padding: calc(var(--scg-admin-spacing) * 2);
+    margin: calc(var(--scg-admin-spacing) * 2) 0;
+    border-radius: var(--scg-admin-radius);
+    box-shadow: var(--scg-admin-shadow);
 }
 
+/* 5. Notifications
+   ========================================================================== */
 .scg-notice {
-    margin: 15px 0 !important;
-    animation: scgFadeIn 0.3s ease;
+    margin: calc(var(--scg-admin-spacing) * 1.5) 0 !important;
+    animation: scgFadeIn var(--scg-admin-animation);
 }
 
+/* 6. Animations
+   ========================================================================== */
 @keyframes scgFadeIn {
     from { opacity: 0; transform: translateY(-10px); }
     to { opacity: 1; transform: translateY(0); }

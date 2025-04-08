@@ -1,23 +1,46 @@
 <?php
-/*
-Plugin Name: Smart Categories Grid
-Description: Responsive category grid with caching and advanced settings
-Version: 1.3
-Author: TM
-Author URI: your-site.com
-Text Domain: smart-cat-grid
-*/
+/**
+ * Smart Categories Grid
+ *
+ * @package SmartCategoriesGrid
+ * @version 1.3
+ * 
+ * Plugin Name: Smart Categories Grid
+ * Description: Responsive category grid with caching and advanced settings
+ * Version: 1.3
+ * Author: TM
+ * Author URI: your-site.com
+ * Text Domain: smart-cat-grid
+ * Requires PHP: 7.4
+ * License: GPL v2 or later
+ */
+
+namespace SmartCategoriesGrid;
 
 defined('ABSPATH') || exit;
 
+/**
+ * Main plugin class
+ */
 class SmartCategoriesGrid {
+    /** @var string Cache prefix for transients */
     private const CACHE_PREFIX = 'scg_cache_';
+    
+    /** @var int Column layout constraints */
     private const MIN_COLUMNS = 2;
     private const MAX_COLUMNS = 6;
     
+    /** @var array Plugin settings */
     private array $settings;
+    
+    /** @var self|null Singleton instance */
     private static ?self $instance = null;
     
+    /**
+     * Get singleton instance
+     *
+     * @return self Plugin instance
+     */
     public static function getInstance(): self {
         if (null === self::$instance) {
             self::$instance = new self();
@@ -25,28 +48,59 @@ class SmartCategoriesGrid {
         return self::$instance;
     }
     
-    private function __construct() {
+    /**
+     * Protected constructor to prevent direct instantiation
+     */
+    protected function __construct() {
         add_action('plugins_loaded', [$this, 'init']);
     }
     
+    /**
+     * Initialize plugin
+     */
     public function init(): void {
         $this->loadSettings();
         $this->registerHooks();
+        
+        // Load translations
+        load_plugin_textdomain('smart-cat-grid', false, dirname(plugin_basename(__FILE__)) . '/languages');
     }
     
+    /**
+     * Load plugin settings from database
+     */
     private function loadSettings(): void {
         $this->settings = get_option('scg_settings', []);
     }
     
+    /**
+     * Register WordPress hooks
+     */
     private function registerHooks(): void {
+        // Shortcode
         add_shortcode('categories_grid', [$this, 'renderGrid']);
+        
+        // Admin hooks
         add_action('admin_menu', [$this, 'addAdminMenu']);
         add_action('admin_init', [$this, 'registerSettings']);
         add_action('admin_enqueue_scripts', [$this, 'adminAssets']);
+        
+        // Frontend hooks
         add_action('wp_enqueue_scripts', [$this, 'frontendAssets']);
+        
+        // AJAX handlers
         add_action('wp_ajax_scg_clear_cache', [$this, 'ajaxClearCache']);
+        
+        // Add image size for thumbnails
+        add_image_size('scg-thumb', 120, 96, true);
     }
 
+    /**
+     * Render categories grid
+     *
+     * @param array $atts Shortcode attributes
+     * @return string Generated HTML
+     */
     public function renderGrid(array $atts): string {
         $atts = shortcode_atts([
             'category_id' => $this->settings['default_category'] ?? 0,
@@ -58,13 +112,22 @@ class SmartCategoriesGrid {
             return '';
         }
         
-        if ($atts['force_update']) {
-            return $this->generateGrid($categoryId);
+        try {
+            return $atts['force_update'] 
+                ? $this->generateGrid($categoryId)
+                : $this->getCachedGrid($categoryId);
+        } catch (\Exception $e) {
+            error_log('SCG Grid Error: ' . $e->getMessage());
+            return '';
         }
-        
-        return $this->getCachedGrid($categoryId);
     }
 
+    /**
+     * Get cached grid HTML or generate new
+     *
+     * @param int $categoryId Parent category ID
+     * @return string Generated HTML
+     */
     private function getCachedGrid(int $categoryId): string {
         $cacheKey = self::CACHE_PREFIX . $categoryId;
         $output = get_transient($cacheKey);
@@ -78,6 +141,12 @@ class SmartCategoriesGrid {
         return $output;
     }
 
+    /**
+     * Generate grid HTML
+     *
+     * @param int $category_id Parent category ID
+     * @return string Generated HTML
+     */
     private function generateGrid(int $category_id): string {
         $subcategories = get_terms([
             'taxonomy' => 'category',
@@ -125,6 +194,12 @@ class SmartCategoriesGrid {
         <?php return ob_get_clean();
     }
 
+    /**
+     * Get category image URL
+     *
+     * @param int $term_id Term ID
+     * @return string Image URL
+     */
     private function getCategoryImage(int $term_id): string {
         $image_id = get_term_meta($term_id, 'logo', true);
         if ($image_id && is_numeric($image_id)) {
@@ -133,6 +208,9 @@ class SmartCategoriesGrid {
         return $this->settings['default_image'] ?? plugins_url('assets/placeholder.png', __FILE__);
     }
 
+    /**
+     * Add admin menu
+     */
     public function addAdminMenu(): void {
         add_options_page(
             'Categories Grid Settings',
@@ -143,6 +221,9 @@ class SmartCategoriesGrid {
         );
     }
 
+    /**
+     * Render settings page
+     */
     public function settingsPage(): void { ?>
         <div class="wrap scg-settings-wrap">
             <h1><?php esc_html_e('Categories Grid Settings', 'smart-cat-grid'); ?></h1>
@@ -156,6 +237,9 @@ class SmartCategoriesGrid {
         </div>
     <?php }
 
+    /**
+     * Register settings
+     */
     public function registerSettings(): void {
         register_setting('scg_settings_group', 'scg_settings', [$this, 'validateSettings']);
         
@@ -222,6 +306,9 @@ class SmartCategoriesGrid {
         );
     }
 
+    /**
+     * Render category select field
+     */
     public function categorySelectField(): void {
         wp_dropdown_categories([
             'show_option_none' => __('Select a category', 'smart-cat-grid'),
@@ -232,6 +319,9 @@ class SmartCategoriesGrid {
         ]);
     }
 
+    /**
+     * Render cache time field
+     */
     public function cacheTimeField(): void {
         $value = $this->settings['cache_time'] ?? DAY_IN_SECONDS; ?>
         <div class="scg-cache-controls">
@@ -248,6 +338,9 @@ class SmartCategoriesGrid {
         </div>
     <?php }
 
+    /**
+     * Render columns field
+     */
     public function columnsField(): void {
         $value = $this->settings['columns'] ?? self::MAX_COLUMNS; ?>
         <select name="scg_settings[columns]">
@@ -259,6 +352,9 @@ class SmartCategoriesGrid {
         </select>
     <?php }
 
+    /**
+     * Render image radius field
+     */
     public function imageRadiusField(): void {
         $value = $this->settings['image_radius'] ?? 3; ?>
         <input type="number" 
@@ -268,6 +364,9 @@ class SmartCategoriesGrid {
                value="<?= esc_attr($value); ?>"> px
     <?php }
 
+    /**
+     * Render hover effect field
+     */
     public function hoverEffectField(): void {
         $checked = isset($this->settings['hover_effect']) && 1 === $this->settings['hover_effect'] ? 'checked' : ''; ?>
         <label>
@@ -279,6 +378,9 @@ class SmartCategoriesGrid {
         </label>
     <?php }
 
+    /**
+     * Render default image field
+     */
     public function defaultImageField(): void { ?>
         <input type="text" 
                name="scg_settings[default_image]" 
@@ -289,6 +391,12 @@ class SmartCategoriesGrid {
         </button>
     <?php }
 
+    /**
+     * Validate settings
+     *
+     * @param array $input Input settings
+     * @return array Validated settings
+     */
     public function validateSettings(array $input): array {
         $output = [];
         
@@ -321,6 +429,9 @@ class SmartCategoriesGrid {
         return $output;
     }
 
+    /**
+     * Clear all cache
+     */
     private function clearAllCache(): void {
         global $wpdb;
         
@@ -335,6 +446,11 @@ class SmartCategoriesGrid {
         }
     }
 
+    /**
+     * Enqueue admin assets
+     *
+     * @param string $hook Current admin page hook
+     */
     public function adminAssets(string $hook): void {
         if ('settings_page_scg-settings' !== $hook) return;
         
@@ -368,6 +484,9 @@ class SmartCategoriesGrid {
         ]);
     }
 
+    /**
+     * Enqueue frontend assets
+     */
     public function frontendAssets(): void {
         wp_enqueue_style(
             'scg-front',
@@ -377,6 +496,9 @@ class SmartCategoriesGrid {
         );
     }
 
+    /**
+     * Handle AJAX cache clearing
+     */
     public function ajaxClearCache(): void {
         check_ajax_referer('scg-clear-cache', 'nonce');
         $this->clearAllCache();
@@ -384,10 +506,17 @@ class SmartCategoriesGrid {
     }
 }
 
+// Initialize plugin
 SmartCategoriesGrid::getInstance();
 
-function init_smart_categories_grid() {
+/**
+ * Helper function to access plugin instance
+ *
+ * @return SmartCategoriesGrid Plugin instance
+ */
+function init_smart_categories_grid(): SmartCategoriesGrid {
     return SmartCategoriesGrid::getInstance();
 }
 
-add_action('plugins_loaded', 'init_smart_categories_grid');
+// Initialize on plugins loaded
+add_action('plugins_loaded', 'SmartCategoriesGrid\\init_smart_categories_grid');
