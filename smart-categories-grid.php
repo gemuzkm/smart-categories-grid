@@ -2,7 +2,7 @@
 /*
 Plugin Name: Smart Categories Grid
 Description: Responsive category grid with caching and advanced settings
-Version: 1.3
+Version: 1.4
 Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
@@ -50,27 +50,37 @@ class SmartCategoriesGrid {
     public function renderGrid(array $atts): string {
         $atts = shortcode_atts([
             'category_id' => $this->settings['default_category'] ?? 0,
+            'type' => 'subcategories',
             'force_update' => false
         ], $atts);
         
-        $categoryId = absint($atts['category_id']);
-        if (!$categoryId) {
-            return '';
+        $type = $atts['type'];
+        if (!in_array($type, ['subcategories', 'top-level'])) {
+            return ''; // Invalid type
+        }
+        
+        if ($type === 'subcategories') {
+            $parent = absint($atts['category_id']);
+            if ($parent === 0) {
+                return ''; // No valid category_id provided
+            }
+        } else { // type === 'top-level'
+            $parent = 0;
         }
         
         if ($atts['force_update']) {
-            return $this->generateGrid($categoryId);
+            return $this->generateGrid($parent);
         }
         
-        return $this->getCachedGrid($categoryId);
+        return $this->getCachedGrid($parent);
     }
 
-    private function getCachedGrid(int $categoryId): string {
-        $cacheKey = self::CACHE_PREFIX . $categoryId;
+    private function getCachedGrid(int $parent): string {
+        $cacheKey = self::CACHE_PREFIX . $parent;
         $output = get_transient($cacheKey);
         
         if (false === $output) {
-            $output = $this->generateGrid($categoryId);
+            $output = $this->generateGrid($parent);
             $cacheTime = $this->settings['cache_time'] ?? DAY_IN_SECONDS;
             set_transient($cacheKey, $output, $cacheTime);
         }
@@ -78,17 +88,17 @@ class SmartCategoriesGrid {
         return $output;
     }
 
-    private function generateGrid(int $category_id): string {
-        $subcategories = get_terms([
+    private function generateGrid(int $parent): string {
+        $categories = get_terms([
             'taxonomy' => 'category',
-            'parent' => $category_id,
+            'parent' => $parent,
             'hide_empty' => false,
             'orderby' => 'none'
         ]);
         
-        if (empty($subcategories) || is_wp_error($subcategories)) return '';
+        if (empty($categories) || is_wp_error($categories)) return '';
         
-        usort($subcategories, function ($a, $b) {
+        usort($categories, function ($a, $b) {
             return strcasecmp($a->name, $b->name);
         });
         
@@ -102,7 +112,7 @@ class SmartCategoriesGrid {
         <div class="scg-grid" 
              style="--scg-columns: <?= esc_attr($grid_settings['columns']); ?>;
                    --scg-image-radius: <?= esc_attr($grid_settings['image_radius']); ?>px;">
-            <?php foreach ($subcategories as $cat) : 
+            <?php foreach ($categories as $cat) : 
                 $image = $this->getCategoryImage($cat->term_id); ?>
                 <div class="scg-col">
                     <div class="scg-card<?= $grid_settings['hover_effect'] ? ' has-hover' : ''; ?>">
@@ -153,6 +163,7 @@ class SmartCategoriesGrid {
                 submit_button(__('Save Changes', 'smart-cat-grid')); 
                 ?>
             </form>
+            <p><?php esc_html_e('Use shortcode [categories_grid type="top-level"] to display top-level categories, or [categories_grid category_id="X"] for subcategories.', 'smart-cat-grid'); ?></p>
         </div>
     <?php }
 
