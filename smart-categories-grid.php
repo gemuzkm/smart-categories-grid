@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: Smart Categories Grid
-Description: Responsive category grid with caching and advanced settings
-Version: 1.4
+Description: Responsive category grid with caching, advanced settings, and category exclusion
+Version: 1.5
 Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
@@ -51,6 +51,7 @@ class SmartCategoriesGrid {
         $atts = shortcode_atts([
             'category_id' => $this->settings['default_category'] ?? 0,
             'type' => 'subcategories',
+            'exclude' => '',
             'force_update' => false
         ], $atts);
         
@@ -68,19 +69,34 @@ class SmartCategoriesGrid {
             $parent = 0;
         }
         
+        // Process excluded categories
+        $exclude_ids = $this->parseExcludeIds($atts['exclude']);
+        
         if ($atts['force_update']) {
-            return $this->generateGrid($parent);
+            return $this->generateGrid($parent, $exclude_ids);
         }
         
-        return $this->getCachedGrid($parent);
+        return $this->getCachedGrid($parent, $exclude_ids);
     }
 
-    private function getCachedGrid(int $parent): string {
-        $cacheKey = self::CACHE_PREFIX . $parent;
+    private function parseExcludeIds(string $exclude): array {
+        $exclude_ids = [];
+        if (!empty($exclude)) {
+            $ids = array_map('absint', array_filter(explode(',', $exclude)));
+            $exclude_ids = array_unique($ids);
+        }
+        // Merge with globally excluded categories from settings
+        $global_excludes = !empty($this->settings['exclude_categories']) ? array_map('absint', $this->settings['exclude_categories']) : [];
+        return array_unique(array_merge($exclude_ids, $global_excludes));
+    }
+
+    private function getCachedGrid(int $parent, array $exclude_ids): string {
+        // Use parent and exclude_ids to create a unique cache key
+        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5(implode(',', $exclude_ids));
         $output = get_transient($cacheKey);
         
         if (false === $output) {
-            $output = $this->generateGrid($parent);
+            $output = $this->generateGrid($parent, $exclude_ids);
             $cacheTime = $this->settings['cache_time'] ?? DAY_IN_SECONDS;
             set_transient($cacheKey, $output, $cacheTime);
         }
@@ -88,12 +104,13 @@ class SmartCategoriesGrid {
         return $output;
     }
 
-    private function generateGrid(int $parent): string {
+    private function generateGrid(int $parent, array $exclude_ids): string {
         $categories = get_terms([
             'taxonomy' => 'category',
             'parent' => $parent,
             'hide_empty' => false,
-            'orderby' => 'none'
+            'orderby' => 'none',
+            'exclude' => $exclude_ids
         ]);
         
         if (empty($categories) || is_wp_error($categories)) return '';
@@ -163,7 +180,7 @@ class SmartCategoriesGrid {
                 submit_button(__('Save Changes', 'smart-cat-grid')); 
                 ?>
             </form>
-            <p><?php esc_html_e('Use shortcode [categories_grid type="top-level"] to display top-level categories, or [categories_grid category_id="X"] for subcategories.', 'smart-cat-grid'); ?></p>
+            <p><?php esc_html_e('Use shortcode [categories_grid type="top-level"] to display top-level categories, or [categories_grid category_id="X"] for subcategories. Use exclude="X,Y" to exclude specific categories.', 'smart-cat-grid'); ?></p>
         </div>
     <?php }
 
@@ -181,6 +198,14 @@ class SmartCategoriesGrid {
             'default_category',
             __('Default Category', 'smart-cat-grid'),
             [$this, 'categorySelectField'],
+            'scg-settings',
+            'scg_general_section'
+        );
+        
+        add_settings_field(
+            'exclude_categories',
+            __('Exclude Categories', 'smart-cat-grid'),
+            [$this, 'excludeCategoriesField'],
             'scg-settings',
             'scg_general_section'
         );
@@ -242,6 +267,23 @@ class SmartCategoriesGrid {
             'hierarchical' => true
         ]);
     }
+
+    public function excludeCategoriesField(): void {
+        $selected = !empty($this->settings['exclude_categories']) ? $this->settings['exclude_categories'] : [];
+        wp_dropdown_categories([
+            'show_option_none' => __('None', 'smart-cat-grid'),
+            'option_none_value' => '',
+            'name' => 'scg_settings[exclude_categories][]',
+            'selected' => $selected,
+            'hierarchical' => true,
+            'multiple' => true,
+            'walker' => new \Walker_CategoryDropdown(),
+            'value_field' => 'term_id',
+            'show_count' => true
+        ]);
+        ?>
+        <p class="description"><?php esc_html_e('Select categories to exclude from the grid. Hold Ctrl/Cmd to select multiple.', 'smart-cat-grid'); ?></p>
+    <?php }
 
     public function cacheTimeField(): void {
         $value = $this->settings['cache_time'] ?? DAY_IN_SECONDS; ?>
@@ -306,6 +348,11 @@ class SmartCategoriesGrid {
         $output['default_category'] = isset($input['default_category']) 
             ? absint($input['default_category']) 
             : 0;
+        
+        // Validate exclude_categories as an array of integers
+        $output['exclude_categories'] = isset($input['exclude_categories']) && is_array($input['exclude_categories'])
+            ? array_map('absint', array_filter($input['exclude_categories']))
+            : [];
         
         $output['cache_time'] = isset($input['cache_time'])
             ? absint($input['cache_time'])
