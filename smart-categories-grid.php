@@ -2,7 +2,7 @@
 /*
 Plugin Name: Smart Categories Grid
 Description: Responsive category grid with caching, advanced settings, and category exclusion
-Version: 1.5
+Version: 1.6
 Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
@@ -86,7 +86,7 @@ class SmartCategoriesGrid {
             $exclude_ids = array_unique($ids);
         }
         // Merge with globally excluded categories from settings
-        $global_excludes = !empty($this->settings['exclude_categories']) ? array_map('absint', $this->settings['exclude_categories']) : [];
+        $global_excludes = !empty($this->settings['exclude_categories']) ? array_map('absint', array_filter(explode(',', $this->settings['exclude_categories']))) : [];
         return array_unique(array_merge($exclude_ids, $global_excludes));
     }
 
@@ -269,20 +269,13 @@ class SmartCategoriesGrid {
     }
 
     public function excludeCategoriesField(): void {
-        $selected = !empty($this->settings['exclude_categories']) ? $this->settings['exclude_categories'] : [];
-        wp_dropdown_categories([
-            'show_option_none' => __('None', 'smart-cat-grid'),
-            'option_none_value' => '',
-            'name' => 'scg_settings[exclude_categories][]',
-            'selected' => $selected,
-            'hierarchical' => true,
-            'multiple' => true,
-            'walker' => new \Walker_CategoryDropdown(),
-            'value_field' => 'term_id',
-            'show_count' => true
-        ]);
+        $value = !empty($this->settings['exclude_categories']) ? esc_attr($this->settings['exclude_categories']) : '';
         ?>
-        <p class="description"><?php esc_html_e('Select categories to exclude from the grid. Hold Ctrl/Cmd to select multiple.', 'smart-cat-grid'); ?></p>
+        <input type="text" 
+               name="scg_settings[exclude_categories]" 
+               value="<?= $value; ?>" 
+               class="regular-text">
+        <p class="description"><?php esc_html_e('Enter a comma-separated list of category IDs to exclude from the grid (e.g., 10,20,30).', 'smart-cat-grid'); ?></p>
     <?php }
 
     public function cacheTimeField(): void {
@@ -349,10 +342,14 @@ class SmartCategoriesGrid {
             ? absint($input['default_category']) 
             : 0;
         
-        // Validate exclude_categories as an array of integers
-        $output['exclude_categories'] = isset($input['exclude_categories']) && is_array($input['exclude_categories'])
-            ? array_map('absint', array_filter($input['exclude_categories']))
-            : [];
+        // Validate exclude_categories as a comma-separated string
+        $exclude = isset($input['exclude_categories']) ? trim($input['exclude_categories']) : '';
+        if (!empty($exclude)) {
+            $ids = array_map('absint', array_filter(explode(',', $exclude)));
+            $output['exclude_categories'] = implode(',', array_unique($ids));
+        } else {
+            $output['exclude_categories'] = '';
+        }
         
         $output['cache_time'] = isset($input['cache_time'])
             ? absint($input['cache_time'])
