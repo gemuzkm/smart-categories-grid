@@ -1,8 +1,8 @@
 <?php
 /*
 Plugin Name: Smart Categories Grid
-Description: Responsive category grid with caching, advanced settings, and category exclusion
-Version: 1.6
+Description: Responsive category grid with caching, advanced settings, category exclusion, and optional image display
+Version: 1.7
 Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
@@ -52,6 +52,7 @@ class SmartCategoriesGrid {
             'category_id' => $this->settings['default_category'] ?? 0,
             'type' => 'subcategories',
             'exclude' => '',
+            'show_images' => $this->settings['default_show_images'] ?? true,
             'force_update' => false
         ], $atts);
         
@@ -72,11 +73,14 @@ class SmartCategoriesGrid {
         // Process excluded categories
         $exclude_ids = $this->parseExcludeIds($atts['exclude']);
         
+        // Determine show_images value
+        $show_images = filter_var($atts['show_images'], FILTER_VALIDATE_BOOLEAN);
+        
         if ($atts['force_update']) {
-            return $this->generateGrid($parent, $exclude_ids);
+            return $this->generateGrid($parent, $exclude_ids, $show_images);
         }
         
-        return $this->getCachedGrid($parent, $exclude_ids);
+        return $this->getCachedGrid($parent, $exclude_ids, $show_images);
     }
 
     private function parseExcludeIds(string $exclude): array {
@@ -90,13 +94,13 @@ class SmartCategoriesGrid {
         return array_unique(array_merge($exclude_ids, $global_excludes));
     }
 
-    private function getCachedGrid(int $parent, array $exclude_ids): string {
-        // Use parent and exclude_ids to create a unique cache key
-        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5(implode(',', $exclude_ids));
+    private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images): string {
+        // Use parent, exclude_ids, and show_images to create a unique cache key
+        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5(implode(',', $exclude_ids)) . '_' . ($show_images ? 'img' : 'noimg');
         $output = get_transient($cacheKey);
         
         if (false === $output) {
-            $output = $this->generateGrid($parent, $exclude_ids);
+            $output = $this->generateGrid($parent, $exclude_ids, $show_images);
             $cacheTime = $this->settings['cache_time'] ?? DAY_IN_SECONDS;
             set_transient($cacheKey, $output, $cacheTime);
         }
@@ -104,7 +108,7 @@ class SmartCategoriesGrid {
         return $output;
     }
 
-    private function generateGrid(int $parent, array $exclude_ids): string {
+    private function generateGrid(int $parent, array $exclude_ids, bool $show_images): string {
         $categories = get_terms([
             'taxonomy' => 'category',
             'parent' => $parent,
@@ -133,13 +137,15 @@ class SmartCategoriesGrid {
                 $image = $this->getCategoryImage($cat->term_id); ?>
                 <div class="scg-col">
                     <div class="scg-card<?= $grid_settings['hover_effect'] ? ' has-hover' : ''; ?>">
-                        <a href="<?= esc_url(get_term_link($cat)); ?>" class="scg-image">
-                            <img src="<?= esc_url($image); ?>" 
-                                 alt="<?= esc_attr($cat->name); ?>" 
-                                 width="120" 
-                                 height="96"
-                                 loading="lazy">
-                        </a>
+                        <?php if ($show_images) : ?>
+                            <a href="<?= esc_url(get_term_link($cat)); ?>" class="scg-image">
+                                <img src="<?= esc_url($image); ?>" 
+                                     alt="<?= esc_attr($cat->name); ?>" 
+                                     width="120" 
+                                     height="96"
+                                     loading="lazy">
+                            </a>
+                        <?php endif; ?>
                         <h3 class="scg-title">
                             <a href="<?= esc_url(get_term_link($cat)); ?>">
                                 <?= esc_html($cat->name); ?>
@@ -180,7 +186,7 @@ class SmartCategoriesGrid {
                 submit_button(__('Save Changes', 'smart-cat-grid')); 
                 ?>
             </form>
-            <p><?php esc_html_e('Use shortcode [categories_grid type="top-level"] to display top-level categories, or [categories_grid category_id="X"] for subcategories. Use exclude="X,Y" to exclude specific categories.', 'smart-cat-grid'); ?></p>
+            <p><?php esc_html_e('Use shortcode [categories_grid type="top-level"] to display top-level categories, or [categories_grid category_id="X"] for subcategories. Use exclude="X,Y" to exclude specific categories. Use show_images="false" to hide images.', 'smart-cat-grid'); ?></p>
         </div>
     <?php }
 
@@ -253,6 +259,14 @@ class SmartCategoriesGrid {
             'default_image',
             __('Default Image', 'smart-cat-grid'),
             [$this, 'defaultImageField'],
+            'scg-settings',
+            'scg_display_section'
+        );
+        
+        add_settings_field(
+            'default_show_images',
+            __('Show Images by Default', 'smart-cat-grid'),
+            [$this, 'defaultShowImagesField'],
             'scg-settings',
             'scg_display_section'
         );
@@ -335,6 +349,19 @@ class SmartCategoriesGrid {
         </button>
     <?php }
 
+    public function defaultShowImagesField(): void {
+        $checked = isset($this->settings['default_show_images']) && 1 === $this->settings['default_show_images'] ? 'checked' : '';
+        ?>
+        <label>
+            <input type="checkbox" 
+                   name="scg_settings[default_show_images]" 
+                   value="1" 
+                   <?= $checked; ?>> 
+            <?php _e('Show images by default', 'smart-cat-grid'); ?>
+        </label>
+        <p class="description"><?php esc_html_e('If checked, images will be displayed in the grid unless overridden by the shortcode.', 'smart-cat-grid'); ?></p>
+    <?php }
+
     public function validateSettings(array $input): array {
         $output = [];
         
@@ -368,6 +395,8 @@ class SmartCategoriesGrid {
             : '';
         
         $output['hover_effect'] = isset($input['hover_effect']) ? 1 : 0;
+        
+        $output['default_show_images'] = isset($input['default_show_images']) ? 1 : 0;
         
         wp_cache_delete('scg_settings', 'options');
        
