@@ -1,6 +1,6 @@
 # Smart Categories Grid
 
-**Smart Categories Grid** is a WordPress plugin that displays categories in a responsive grid layout with caching, advanced settings, and category exclusion capabilities. It offers flexibility in customizing the appearance and performance, making it an ideal solution for sites with a large number of categories.
+**Smart Categories Grid** is a WordPress plugin that displays categories in a responsive grid layout with caching, advanced settings, category exclusion, optional image display, and category limit capabilities. It offers flexibility in customizing the appearance and performance, making it an ideal solution for sites with a large number of categories.
 
 ## Features
 
@@ -12,6 +12,7 @@
 - **Default Image Support**: Set a default image for categories without images.
 - **Display Options**: Choose to display subcategories or top-level categories.
 - **Category Exclusion**: Exclude specific categories globally via settings or per shortcode.
+- **Category Limit**: Limit the number of categories displayed, with a "View All" button if more categories are available.
 - **Easy Integration**: Simple installation and configuration through the WordPress admin panel.
 
 ## Installation
@@ -28,27 +29,29 @@ The plugin provides a shortcode `[categories_grid]` that can be used to display 
 - `category_id`: The ID of the parent category to display its subcategories (only used when `type="subcategories"`).
 - `type`: The type of categories to display. Possible values are `'subcategories'` (default) or `'top-level'`.
 - `exclude`: Comma-separated list of category IDs to exclude from the grid (e.g., `exclude="10,20"`).
+- `show_images`: Whether to display category images (true/false). Defaults to the value set in the settings.
+- `limit`: The maximum number of categories to display. If more categories are available, a "View All" button will be shown.
 - `force_update`: Force cache update (true/false). Defaults to `false`.
 
 **Examples:**
 
-- Display subcategories of a specific category:
+- Display subcategories of a specific category with a limit:
   ```php
-  [categories_grid category_id="5"]
+  [categories_grid category_id="5" limit="10"]
   ```
-  This will display the subcategories of the category with ID 5.
+  This will display up to 10 subcategories of the category with ID 5. If there are more than 10 subcategories, a "View All" button will be shown.
 
-- Display top-level categories:
+- Display top-level categories with no limit:
   ```php
-  [categories_grid type="top-level"]
+  [categories_grid type="top-level" limit="0"]
   ```
-  This will display all top-level categories, ignoring the `category_id` attribute.
+  This will display all top-level categories without any limit.
 
-- Exclude specific categories:
+- Exclude specific categories and hide images:
   ```php
-  [categories_grid category_id="5" exclude="10,20"]
+  [categories_grid category_id="5" exclude="10,20" show_images="false"]
   ```
-  This will display the subcategories of category 5, excluding categories with IDs 10 and 20.
+  This will display the subcategories of category 5, excluding categories with IDs 10 and 20, and without images.
 
 - Force cache update:
   ```php
@@ -63,10 +66,12 @@ The plugin offers the following settings in the admin panel:
 - **Default Category**: Select the default parent category to display its subcategories when using `[categories_grid]` without attributes.
 - **Exclude Categories**: Enter a comma-separated list of category IDs to exclude from all grids (e.g., `10,20,30`).
 - **Cache Duration**: Set the caching time for data (1 hour, 12 hours, 1 day, 1 week, or no caching).
+- **Default Category Limit**: Set the default number of categories to display. 0 means no limit.
 - **Default Columns**: Choose the number of columns in the grid (from 2 to 6).
 - **Image Border Radius**: Set the border radius for category images (from 0 to 50 pixels).
 - **Hover Effect**: Enable or disable hover effects on categories.
 - **Default Image**: Set the URL of the default image for categories without images.
+- **Show Images by Default**: If checked, images will be displayed in the grid unless overridden by the shortcode.
 
 ## Compatibility
 

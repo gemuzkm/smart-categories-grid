@@ -58,6 +58,27 @@
     color: #0073aa;
 }
 
+.scg-view-all {
+    grid-column: 1 / -1;
+    text-align: center;
+    margin-top: 20px;
+}
+
+.scg-view-all-link {
+    display: inline-block;
+    padding: 10px 20px;
+    background: #0073aa;
+    color: #fff;
+    text-decoration: none;
+    border-radius: 5px;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.scg-view-all-link:hover {
+    background: #005a87;
+}
+
 @media (max-width: 767px) {
     .scg-grid {
         grid-template-columns: repeat(2, 1fr) !important;
