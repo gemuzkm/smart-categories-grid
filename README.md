@@ -14,6 +14,7 @@
 - **Category Exclusion**: Exclude specific categories globally via settings or per shortcode.
 - **Category Limit**: Limit the number of categories displayed, with a "View All" button if more categories are available.
 - **Button Color**: Customize the color of the "View All" button.
+- **View All URL**: Set the URL for the "View All" button for top-level categories.
 - **Easy Integration**: Simple installation and configuration through the WordPress admin panel.
 
 ## Installation
@@ -68,6 +69,7 @@ The plugin offers the following settings in the admin panel:
 - **Exclude Categories**: Enter a comma-separated list of category IDs to exclude from all grids (e.g., `10,20,30`).
 - **Cache Duration**: Set the caching time for data (1 hour, 12 hours, 1 day, 1 week, or no caching).
 - **Default Category Limit**: Set the default number of categories to display. 0 means no limit.
+- **View All URL**: Enter the URL for the "View All" button for top-level categories (e.g., blog page). Leave empty to hide the button.
 - **Default Columns**: Choose the number of columns in the grid (from 2 to 6).
 - **Image Border Radius**: Set the border radius for category images (from 0 to 50 pixels).
 - **Hover Effect**: Enable or disable hover effects on categories.

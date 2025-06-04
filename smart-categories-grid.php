@@ -164,12 +164,19 @@ class SmartCategoriesGrid {
                     </div>
                 </div>
             <?php endforeach; ?>
-            <?php if ($limit > 0 && $total_categories > $limit) : ?>
-                <div class="scg-view-all">
-                    <a href="<?= esc_url(get_term_link($parent)); ?>" class="scg-view-all-link">
-                        <?php _e('View All', 'smart-cat-grid'); ?>
-                    </a>
-                </div>
+            <?php if ($limit > 0 && $total_categories > $limit) : 
+                if ($parent > 0) {
+                    $view_all_url = get_term_link($parent);
+                } else {
+                    $view_all_url = $this->settings['view_all_url'] ?? '';
+                }
+                if (!empty($view_all_url) && !is_wp_error($view_all_url)) : ?>
+                    <div class="scg-view-all">
+                        <a href="<?= esc_url($view_all_url); ?>" class="scg-view-all-link">
+                            <?php _e('View All', 'smart-cat-grid'); ?>
+                        </a>
+                    </div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
         <?php return ob_get_clean();
@@ -245,6 +252,14 @@ class SmartCategoriesGrid {
             'default_limit',
             __('Default Category Limit', 'smart-cat-grid'),
             [$this, 'defaultLimitField'],
+            'scg-settings',
+            'scg_general_section'
+        );
+        
+        add_settings_field(
+            'view_all_url',
+            __('View All URL', 'smart-cat-grid'),
+            [$this, 'viewAllUrlField'],
             'scg-settings',
             'scg_general_section'
         );
@@ -405,6 +420,16 @@ class SmartCategoriesGrid {
         <p class="description"><?php esc_html_e('Set the default number of categories to display. 0 means no limit.', 'smart-cat-grid'); ?></p>
     <?php }
 
+    public function viewAllUrlField(): void {
+        $value = $this->settings['view_all_url'] ?? '';
+        ?>
+        <input type="text" 
+               name="scg_settings[view_all_url]" 
+               value="<?= esc_attr($value); ?>" 
+               class="regular-text">
+        <p class="description"><?php esc_html_e('Enter the URL for the "View All" button for top-level categories (e.g., blog page). Leave empty to hide the button.', 'smart-cat-grid'); ?></p>
+    <?php }
+
     public function buttonColorField(): void {
         $value = $this->settings['button_color'] ?? '#b93434';
         ?>
@@ -453,6 +478,8 @@ class SmartCategoriesGrid {
         $output['default_show_images'] = isset($input['default_show_images']) ? 1 : 0;
         
         $output['default_limit'] = isset($input['default_limit']) ? absint($input['default_limit']) : 0;
+        
+        $output['view_all_url'] = isset($input['view_all_url']) ? esc_url_raw($input['view_all_url']) : '';
         
         $output['button_color'] = isset($input['button_color']) ? sanitize_hex_color($input['button_color']) : '#b93434';
         
