@@ -13,6 +13,7 @@
 - **Display Options**: Choose to display subcategories or top-level categories.
 - **Category Exclusion**: Exclude specific categories globally via settings or per shortcode.
 - **Category Limit**: Limit the number of categories displayed, with a "View All" button if more categories are available.
+- **Button Color**: Customize the color of the "View All" button.
 - **Easy Integration**: Simple installation and configuration through the WordPress admin panel.
 
 ## Installation
@@ -72,6 +73,7 @@ The plugin offers the following settings in the admin panel:
 - **Hover Effect**: Enable or disable hover effects on categories.
 - **Default Image**: Set the URL of the default image for categories without images.
 - **Show Images by Default**: If checked, images will be displayed in the grid unless overridden by the shortcode.
+- **Button Color**: Set the color for the "View All" button. Defaults to `#b93434`.
 
 ## Compatibility
 

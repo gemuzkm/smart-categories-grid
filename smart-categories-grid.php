@@ -141,7 +141,8 @@ class SmartCategoriesGrid {
         ob_start(); ?>
         <div class="scg-grid" 
              style="--scg-columns: <?= esc_attr($grid_settings['columns']); ?>;
-                   --scg-image-radius: <?= esc_attr($grid_settings['image_radius']); ?>px;">
+                   --scg-image-radius: <?= esc_attr($grid_settings['image_radius']); ?>px;
+                   --scg-button-color: <?= esc_attr($this->settings['button_color'] ?? '#b93434'); ?>;">
             <?php foreach ($categories as $cat) : 
                 $image = $this->getCategoryImage($cat->term_id); ?>
                 <div class="scg-col">
@@ -294,6 +295,14 @@ class SmartCategoriesGrid {
             'scg-settings',
             'scg_display_section'
         );
+        
+        add_settings_field(
+            'button_color',
+            __('Button Color', 'smart-cat-grid'),
+            [$this, 'buttonColorField'],
+            'scg-settings',
+            'scg_display_section'
+        );
     }
 
     public function categorySelectField(): void {
@@ -396,6 +405,17 @@ class SmartCategoriesGrid {
         <p class="description"><?php esc_html_e('Set the default number of categories to display. 0 means no limit.', 'smart-cat-grid'); ?></p>
     <?php }
 
+    public function buttonColorField(): void {
+        $value = $this->settings['button_color'] ?? '#b93434';
+        ?>
+        <input type="text" 
+               name="scg_settings[button_color]" 
+               value="<?= esc_attr($value); ?>" 
+               class="scg-color-picker">
+        <p class="description"><?php esc_html_e('Select the color for the "View All" button.', 'smart-cat-grid'); ?></p>
+        <?php
+    }
+
     public function validateSettings(array $input): array {
         $output = [];
         
@@ -434,6 +454,8 @@ class SmartCategoriesGrid {
         
         $output['default_limit'] = isset($input['default_limit']) ? absint($input['default_limit']) : 0;
         
+        $output['button_color'] = isset($input['button_color']) ? sanitize_hex_color($input['button_color']) : '#b93434';
+        
         wp_cache_delete('scg_settings', 'options');
        
         $this->clearAllCache();
@@ -459,6 +481,13 @@ class SmartCategoriesGrid {
         if ('settings_page_scg-settings' !== $hook) return;
         
         wp_enqueue_media();
+        wp_enqueue_style('wp-color-picker');
+        wp_enqueue_script('wp-color-picker');
+        wp_add_inline_script('wp-color-picker', '
+            jQuery(document).ready(function($){
+                $(".scg-color-picker").wpColorPicker();
+            });
+        ');
         wp_enqueue_style(
             'scg-admin',
             plugins_url('assets/admin.css', __FILE__),

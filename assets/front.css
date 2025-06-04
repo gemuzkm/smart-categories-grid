@@ -55,7 +55,7 @@
 }
 
 .scg-title a:hover {
-    color: #0073aa;
+    color: #b93434;
 }
 
 .scg-view-all {
@@ -67,7 +67,7 @@
 .scg-view-all-link {
     display: inline-block;
     padding: 10px 20px;
-    background: #0073aa;
+    background: var(--scg-button-color, #b93434);
     color: #fff;
     text-decoration: none;
     border-radius: 5px;
@@ -76,7 +76,7 @@
 }
 
 .scg-view-all-link:hover {
-    background: #005a87;
+    background: #a12e2e;
 }
 
 @media (max-width: 767px) {
