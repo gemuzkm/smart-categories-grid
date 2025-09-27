@@ -2,11 +2,13 @@
     display: grid;
     gap: 20px 15px;
     grid-template-columns: repeat(var(--scg-columns, 6), 1fr);
+    align-items: stretch; /* Добавляем растягивание по высоте */
 }
 
 .scg-col {
     position: relative;
     break-inside: avoid;
+    height: 100%; /* Заставляем занимать всю высоту */
 }
 
 .scg-card {
@@ -17,6 +19,10 @@
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     position: relative;
     z-index: 1;
+    height: 100%; /* Заставляем карточку занимать всю высоту */
+    display: flex;
+    flex-direction: column; /* Вертикальное расположение элементов */
+    justify-content: space-between; /* Равномерное распределение содержимого */
 }
 
 .scg-card.has-hover {
@@ -32,6 +38,7 @@
     display: block;
     text-align: center;
     margin: 0 auto;
+    flex-shrink: 0; /* Предотвращаем сжатие изображения */
 }
 
 .scg-image img {
@@ -47,11 +54,17 @@
     margin: 10px 0 0;
     font-size: 16px;
     line-height: 1.4;
+    flex-grow: 1; /* Позволяем заголовку занимать доступное пространство */
+    display: flex;
+    align-items: center; /* Центрируем заголовок по вертикали */
+    justify-content: center; /* Центрируем заголовок по горизонтали */
 }
 
 .scg-title a {
     color: #333;
     text-decoration: none;
+    display: block;
+    text-align: center;
 }
 
 .scg-title a:hover {
@@ -79,6 +92,7 @@
     background: #a12e2e;
 }
 
+/* Медиа-запросы остаются без изменений */
 @media (max-width: 767px) {
     .scg-grid {
         grid-template-columns: repeat(2, 1fr) !important;
