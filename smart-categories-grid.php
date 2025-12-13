@@ -14,7 +14,7 @@ class SmartCategoriesGrid {
     private const CACHE_PREFIX = 'scg_cache_';
     private const MIN_COLUMNS = 2;
     private const MAX_COLUMNS = 6;
-    private const IMAGE_SIZE_NAME = 'scg-thumb'; // Название кастомного размера
+    private const IMAGE_SIZE_NAME = 'scg-thumb'; // Custom image size name
     
     private array $settings;
     private static ?self $instance = null;
@@ -28,7 +28,7 @@ class SmartCategoriesGrid {
     
     private function __construct() {
         add_action('plugins_loaded', [$this, 'init']);
-        // Добавляем кастомный размер изображений при активации темы
+        // Add custom image size when theme is activated
         add_action('after_setup_theme', [$this, 'addImageSizes']);
     }
     
@@ -38,18 +38,18 @@ class SmartCategoriesGrid {
     }
     
     /**
-     * Добавляет кастомный размер изображений для категорий
+     * Adds custom image size for categories
      */
     public function addImageSizes(): void {
-        // Добавляем кастомный размер 120x96 пикселей с обрезкой
+        // Add custom image size 120x96 pixels with cropping
         add_image_size(self::IMAGE_SIZE_NAME, 120, 96, true);
         
-        // Добавляем фильтр для отображения нашего размера в медиабиблиотеке
+        // Add filter to display our size in media library
         add_filter('image_size_names_choose', [$this, 'addImageSizeNames']);
     }
     
     /**
-     * Добавляет название нашего размера в список доступных размеров
+     * Adds our size name to the list of available sizes
      */
     public function addImageSizeNames(array $sizes): array {
         return array_merge($sizes, [
@@ -73,23 +73,23 @@ class SmartCategoriesGrid {
         add_action('wp_enqueue_scripts', [$this, 'frontendAssets']);
         add_action('wp_ajax_scg_clear_cache', [$this, 'ajaxClearCache']);
         
-        // Очистка кеша при изменении категорий
+        // Clear cache when categories are modified
         add_action('created_category', [$this, 'clearAllCache']);
         add_action('edited_category', [$this, 'clearAllCache']);
         add_action('delete_category', [$this, 'clearAllCache']);
         
-        // Добавляем хук для регенерации миниатюр при активации плагина
+        // Add hook for thumbnail regeneration on plugin activation
         register_activation_hook(__FILE__, [$this, 'onActivation']);
     }
     
     /**
-     * Выполняется при активации плагина
+     * Executes on plugin activation
      */
     public function onActivation(): void {
-        // Добавляем размер изображений
+        // Add image size
         $this->addImageSizes();
         
-        // Опционально: можно добавить уведомление о необходимости регенерации миниатюр
+        // Optionally: add notice about thumbnail regeneration requirement
         add_option('scg_show_regenerate_notice', true);
     }
     
@@ -140,7 +140,7 @@ class SmartCategoriesGrid {
     }
     
     private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
-        // Оптимизированная генерация ключа кеша
+        // Optimized cache key generation
         $exclude_str = empty($exclude_ids) ? '0' : implode(',', $exclude_ids);
         $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5($exclude_str) . '_' . ($show_images ? '1' : '0') . '_' . $limit;
         $output = get_transient($cacheKey);
@@ -157,7 +157,7 @@ class SmartCategoriesGrid {
     }
     
     private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
-        // Оптимизированный запрос с правильными параметрами
+        // Optimized query with proper parameters
         $args = [
             'taxonomy' => 'category',
             'parent' => $parent,
@@ -171,21 +171,21 @@ class SmartCategoriesGrid {
             $args['exclude'] = $exclude_ids;
         }
         
-        // Получаем все категории для подсчета общего количества (нужно для кнопки "View All")
+        // Get all categories to count total (needed for "View All" button)
         $all_categories = get_terms($args);
         
         if (empty($all_categories) || is_wp_error($all_categories)) {
             return '';
         }
         
-        // Дополнительная сортировка для точности
+        // Additional sorting for accuracy
         usort($all_categories, function ($a, $b) {
             return strcasecmp($a->name, $b->name);
         });
         
         $total_categories = count($all_categories);
         
-        // Применяем лимит если нужно
+        // Apply limit if needed
         $categories = $all_categories;
         if ($limit > 0 && $total_categories > $limit) {
             $categories = array_slice($all_categories, 0, $limit);
@@ -253,10 +253,10 @@ class SmartCategoriesGrid {
     }
     
     /**
-     * Получает изображение категории с использованием кастомного размера
+     * Gets category image using custom size
      */
     private function getCategoryImage(int $term_id): string {
-        // Кешируем результат для избежания повторных запросов
+        // Cache result to avoid repeated queries
         static $image_cache = [];
         
         if (isset($image_cache[$term_id])) {
@@ -266,7 +266,7 @@ class SmartCategoriesGrid {
         $image_id = get_term_meta($term_id, 'logo', true);
         
         if ($image_id && is_numeric($image_id)) {
-            // Используем наш кастомный размер изображения
+            // Use our custom image size
             $image_url = wp_get_attachment_image_url((int)$image_id, self::IMAGE_SIZE_NAME);
             if ($image_url) {
                 $image_cache[$term_id] = $image_url;
@@ -274,7 +274,7 @@ class SmartCategoriesGrid {
             }
         }
         
-        // Возвращаем изображение по умолчанию
+        // Return default image
         $default_image = $this->settings['default_image'] ?? plugins_url('assets/placeholder.png', __FILE__);
         $image_cache[$term_id] = $default_image;
         return $default_image;
@@ -325,7 +325,6 @@ class SmartCategoriesGrid {
         </div>
     <?php }
 
-    // Остальные методы остаются без изменений...
     public function registerSettings(): void {
         register_setting('scg_settings_group', 'scg_settings', [$this, 'validateSettings']);
         
@@ -432,7 +431,6 @@ class SmartCategoriesGrid {
         );
     }
     
-    // Все остальные методы остаются такими же, как в оригинальном коде...
     public function categorySelectField(): void {
         wp_dropdown_categories([
             'show_option_none' => __('Select a category', 'smart-cat-grid'),
@@ -560,12 +558,12 @@ class SmartCategoriesGrid {
     public function validateSettings(array $input): array {
         $output = [];
         
-        // Валидация default_category
+        // Validate default_category
         $output['default_category'] = isset($input['default_category']) 
             ? absint($input['default_category']) 
             : 0;
         
-        // Валидация exclude_categories
+        // Validate exclude_categories
         $exclude = isset($input['exclude_categories']) ? trim(sanitize_text_field($input['exclude_categories'])) : '';
         if (!empty($exclude)) {
             $ids = array_map('absint', array_filter(explode(',', $exclude), 'is_numeric'));
@@ -574,48 +572,48 @@ class SmartCategoriesGrid {
             $output['exclude_categories'] = '';
         }
         
-        // Валидация cache_time
+        // Validate cache_time
         $output['cache_time'] = isset($input['cache_time'])
             ? absint($input['cache_time'])
             : DAY_IN_SECONDS;
         
-        // Валидация columns
+        // Validate columns
         $columns = isset($input['columns']) ? absint($input['columns']) : self::MAX_COLUMNS;
         $output['columns'] = ($columns >= self::MIN_COLUMNS && $columns <= self::MAX_COLUMNS) 
             ? $columns 
             : self::MAX_COLUMNS;
         
-        // Валидация image_radius
+        // Validate image_radius
         $output['image_radius'] = isset($input['image_radius'])
             ? max(0, min(50, absint($input['image_radius'])))
             : 3;
         
-        // Валидация default_image
+        // Validate default_image
         $output['default_image'] = isset($input['default_image'])
             ? esc_url_raw($input['default_image'])
             : '';
         
-        // Валидация hover_effect
+        // Validate hover_effect
         $output['hover_effect'] = isset($input['hover_effect']) ? 1 : 0;
         
-        // Валидация default_show_images
+        // Validate default_show_images
         $output['default_show_images'] = isset($input['default_show_images']) ? 1 : 0;
         
-        // Валидация default_limit
+        // Validate default_limit
         $output['default_limit'] = isset($input['default_limit']) ? max(0, absint($input['default_limit'])) : 0;
         
-        // Валидация view_all_url
+        // Validate view_all_url
         $output['view_all_url'] = isset($input['view_all_url']) ? esc_url_raw($input['view_all_url']) : '';
         
-        // Валидация button_color
+        // Validate button_color
         $output['button_color'] = isset($input['button_color']) 
             ? sanitize_hex_color($input['button_color']) 
             : '#b93434';
         
-        // Очистка кеша опций
+        // Clear options cache
         wp_cache_delete('scg_settings', 'options');
         
-        // Очистка кеша сетки
+        // Clear grid cache
         $this->clearAllCache();
         
         return $output;
@@ -624,11 +622,11 @@ class SmartCategoriesGrid {
     public function clearAllCache(): void {
         global $wpdb;
         
-        // Оптимизированный запрос для удаления всех транзиентов плагина
+        // Optimized query to delete all plugin transients
         $pattern = $wpdb->esc_like('_transient_' . self::CACHE_PREFIX) . '%';
         $transient_timeout_pattern = $wpdb->esc_like('_transient_timeout_' . self::CACHE_PREFIX) . '%';
         
-        // Удаляем транзиенты и их таймауты одним запросом
+        // Delete transients and their timeouts in one query
         $wpdb->query(
             $wpdb->prepare(
                 "DELETE FROM {$wpdb->options} 
@@ -638,7 +636,7 @@ class SmartCategoriesGrid {
             )
         );
         
-        // Очищаем кеш опций WordPress
+        // Clear WordPress options cache
         wp_cache_delete('alloptions', 'options');
     }
     
@@ -683,16 +681,16 @@ class SmartCategoriesGrid {
     }
     
     public function frontendAssets(): void {
-        // Загружаем стили условно - проверяем наличие шорткода
+        // Conditionally load styles - check for shortcode presence
         global $post;
         $should_load = false;
         
-        // Проверяем основной контент поста
+        // Check main post content
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'categories_grid')) {
             $should_load = true;
         }
         
-        // Проверяем виджеты текста
+        // Check text widgets
         if (!$should_load) {
             $widget_text = get_option('widget_text');
             if (is_array($widget_text)) {
@@ -705,8 +703,8 @@ class SmartCategoriesGrid {
             }
         }
         
-        // Если не найдено, загружаем всегда (для совместимости с виджетами и другими местами)
-        // Можно оптимизировать дальше, добавив флаг через фильтр
+        // If not found, load always (for compatibility with widgets and other places)
+        // Can be further optimized by adding a flag via filter
         $should_load = apply_filters('scg_should_load_assets', $should_load);
         
         if ($should_load) {
