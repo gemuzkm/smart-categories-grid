@@ -94,38 +94,137 @@ class SmartCategoriesGrid {
     }
     
     public function renderGrid(array $atts): string {
+        // Parse shortcode attributes with defaults from settings
         $atts = shortcode_atts([
-            'category_id' => $this->settings['default_category'] ?? 0,
+            'category_id' => '',
             'type' => 'subcategories',
+            'auto' => 'false',
             'exclude' => '',
-            'show_images' => $this->settings['default_show_images'] ?? true,
-            'limit' => $this->settings['default_limit'] ?? 0,
-            'force_update' => false
+            'show_images' => '',
+            'limit' => '',
+            'columns' => '',
+            'style' => '',
+            'hover_effect' => '',
+            'image_radius' => '',
+            'button_color' => '',
+            'force_update' => 'false'
         ], $atts);
         
-        $type = $atts['type'];
-        if (!in_array($type, ['subcategories', 'top-level'])) {
-            return '';
-        }
-        
-        if ($type === 'subcategories') {
-            $parent = absint($atts['category_id']);
-            if ($parent === 0) {
-                return '';
+        // Handle auto mode - automatically detect current category
+        $auto_mode = filter_var($atts['auto'], FILTER_VALIDATE_BOOLEAN);
+        if ($auto_mode) {
+            $current_category = $this->getCurrentCategory();
+            if (!$current_category || $current_category === 0) {
+                return ''; // No current category found
             }
+            $parent = $current_category;
         } else {
-            $parent = 0;
+            // Normal mode - use category_id or default
+            if ($atts['type'] === 'top-level') {
+                $parent = 0;
+            } else {
+                $parent = !empty($atts['category_id']) 
+                    ? absint($atts['category_id']) 
+                    : ($this->settings['default_category'] ?? 0);
+                
+                if ($parent === 0) {
+                    return '';
+                }
+            }
         }
         
+        // Parse parameters - shortcode params override settings
         $exclude_ids = $this->parseExcludeIds($atts['exclude']);
-        $show_images = filter_var($atts['show_images'], FILTER_VALIDATE_BOOLEAN);
-        $limit = absint($atts['limit']);
         
-        if ($atts['force_update']) {
-            return $this->generateGrid($parent, $exclude_ids, $show_images, $limit);
+        // Get settings with shortcode overrides
+        $show_images = $this->getShortcodeSetting('show_images', $atts, $this->settings['default_show_images'] ?? true);
+        $limit = $this->getShortcodeSetting('limit', $atts, $this->settings['default_limit'] ?? 0, 'int');
+        $columns = $this->getShortcodeSetting('columns', $atts, $this->settings['columns'] ?? self::MAX_COLUMNS, 'int');
+        $style = $this->getShortcodeSetting('style', $atts, $this->settings['grid_style'] ?? 'classic');
+        $hover_effect = $this->getShortcodeSetting('hover_effect', $atts, !empty($this->settings['hover_effect']), 'bool');
+        $image_radius = $this->getShortcodeSetting('image_radius', $atts, $this->settings['image_radius'] ?? 3, 'int');
+        $button_color = $this->getShortcodeSetting('button_color', $atts, $this->settings['button_color'] ?? '#b93434');
+        
+        $force_update = filter_var($atts['force_update'], FILTER_VALIDATE_BOOLEAN);
+        
+        // Build settings array for grid generation
+        $grid_settings = [
+            'columns' => $columns,
+            'image_radius' => $image_radius,
+            'hover_effect' => $hover_effect,
+            'style' => $style,
+            'button_color' => $button_color
+        ];
+        
+        if ($force_update) {
+            return $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
         }
         
-        return $this->getCachedGrid($parent, $exclude_ids, $show_images, $limit);
+        return $this->getCachedGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
+    }
+    
+    /**
+     * Gets current category ID from query or post (optimized with caching)
+     */
+    private function getCurrentCategory(): int {
+        static $cached_category = null;
+        
+        // Return cached value if available
+        if ($cached_category !== null) {
+            return $cached_category;
+        }
+        
+        // Try to get category from queried object (category archive page) - fastest method
+        $queried_object = get_queried_object();
+        
+        if ($queried_object && isset($queried_object->taxonomy) && $queried_object->taxonomy === 'category') {
+            $cached_category = (int) $queried_object->term_id;
+            return $cached_category;
+        }
+        
+        // Try to get category from single post
+        if (is_single()) {
+            $categories = get_the_category();
+            if (!empty($categories) && isset($categories[0])) {
+                $cached_category = (int) $categories[0]->term_id;
+                return $cached_category;
+            }
+        }
+        
+        // Try to get category from post in loop
+        global $post;
+        if (is_a($post, 'WP_Post')) {
+            $categories = get_the_category($post->ID);
+            if (!empty($categories) && isset($categories[0])) {
+                $cached_category = (int) $categories[0]->term_id;
+                return $cached_category;
+            }
+        }
+        
+        $cached_category = 0;
+        return 0;
+    }
+    
+    /**
+     * Gets setting value from shortcode or falls back to default
+     */
+    private function getShortcodeSetting(string $key, array $atts, $default, string $type = 'string') {
+        if (!isset($atts[$key]) || $atts[$key] === '') {
+            return $default;
+        }
+        
+        $value = $atts[$key];
+        
+        switch ($type) {
+            case 'int':
+                return absint($value);
+            case 'bool':
+                return filter_var($value, FILTER_VALIDATE_BOOLEAN);
+            case 'color':
+                return sanitize_hex_color($value);
+            default:
+                return sanitize_text_field($value);
+        }
     }
     
     private function parseExcludeIds(string $exclude): array {
@@ -139,15 +238,16 @@ class SmartCategoriesGrid {
         return array_unique(array_merge($exclude_ids, $global_excludes));
     }
     
-    private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
-        // Optimized cache key generation
-        $style = $this->settings['grid_style'] ?? 'classic';
+    private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): string {
+        // Optimized cache key generation - include all settings that affect output
+        $style = $grid_settings['style'] ?? 'classic';
+        $columns = $grid_settings['columns'] ?? self::MAX_COLUMNS;
         $exclude_str = empty($exclude_ids) ? '0' : implode(',', $exclude_ids);
-        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5($exclude_str) . '_' . ($show_images ? '1' : '0') . '_' . $limit . '_' . $style;
+        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5($exclude_str) . '_' . ($show_images ? '1' : '0') . '_' . $limit . '_' . $style . '_' . $columns;
         $output = get_transient($cacheKey);
         
         if (false === $output) {
-            $output = $this->generateGrid($parent, $exclude_ids, $show_images, $limit);
+            $output = $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
             $cacheTime = $this->settings['cache_time'] ?? DAY_IN_SECONDS;
             if ($cacheTime > 0) {
                 set_transient($cacheKey, $output, $cacheTime);
@@ -157,54 +257,64 @@ class SmartCategoriesGrid {
         return $output;
     }
     
-    private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
-        // Optimized query with proper parameters
+    private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): string {
+        // Optimized query - get only direct children (1 level deep)
+        // Using 'parent' parameter ensures we only get direct children
         $args = [
             'taxonomy' => 'category',
             'parent' => $parent,
             'hide_empty' => false,
             'orderby' => 'name',
             'order' => 'ASC',
-            'fields' => 'all'
+            'fields' => 'all',
+            'number' => 0, // Get all for counting, we'll limit later
+            'hierarchical' => false, // Important: only direct children, no recursion
+            'update_term_meta_cache' => false // Skip term meta for performance
         ];
         
         if (!empty($exclude_ids)) {
             $args['exclude'] = $exclude_ids;
         }
         
-        // Get all categories to count total (needed for "View All" button)
+        // Get only direct child categories (1 level) - WordPress handles this with 'parent' parameter
         $all_categories = get_terms($args);
         
+        // If no subcategories found, return empty
         if (empty($all_categories) || is_wp_error($all_categories)) {
             return '';
         }
         
-        // Additional sorting for accuracy
-        usort($all_categories, function ($a, $b) {
+        // Double-check: filter to ensure we only have direct children (safety check)
+        $direct_children = [];
+        foreach ($all_categories as $cat) {
+            if ((int) $cat->parent === $parent) {
+                $direct_children[] = $cat;
+            }
+        }
+        
+        if (empty($direct_children)) {
+            return '';
+        }
+        
+        // Additional sorting for accuracy (already sorted by name, but ensure consistency)
+        usort($direct_children, function ($a, $b) {
             return strcasecmp($a->name, $b->name);
         });
         
-        $total_categories = count($all_categories);
+        $total_categories = count($direct_children);
         
         // Apply limit if needed
-        $categories = $all_categories;
+        $categories = $direct_children;
         if ($limit > 0 && $total_categories > $limit) {
-            $categories = array_slice($all_categories, 0, $limit);
+            $categories = array_slice($direct_children, 0, $limit);
         }
-        
-        $grid_settings = [
-            'columns' => $this->settings['columns'] ?? self::MAX_COLUMNS,
-            'image_radius' => $this->settings['image_radius'] ?? 3,
-            'hover_effect' => !empty($this->settings['hover_effect']),
-            'style' => $this->settings['grid_style'] ?? 'classic'
-        ];
         
         ob_start(); 
         $hover_class = $grid_settings['hover_effect'] ? ' has-hover' : '';
         $style_class = ' scg-style-' . esc_attr($grid_settings['style']);
         $columns = absint($grid_settings['columns']);
         $image_radius = absint($grid_settings['image_radius']);
-        $button_color = sanitize_hex_color($this->settings['button_color'] ?? '#b93434');
+        $button_color = sanitize_hex_color($grid_settings['button_color']);
         
         // For text style, always hide images
         $display_images = ($grid_settings['style'] === 'text') ? false : $show_images;

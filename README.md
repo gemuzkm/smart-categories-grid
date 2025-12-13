@@ -10,25 +10,32 @@
 
 - **📱 Responsive Grid**: Automatically adjusts to different screen sizes (mobile, tablet, desktop)
 - **⚡ Advanced Caching**: Intelligent caching system with configurable duration and automatic cache invalidation
+- **🎯 Auto Category Detection**: Automatically detect current category and display its direct subcategories
 - **🎨 Customizable Display**: 
   - Adjustable columns (2-6 columns)
   - Customizable image border radius
   - Optional hover effects
   - Custom button colors
+  - 5 beautiful styles: Classic, Modern, Minimal, Card, Text Only
 - **🖼️ Image Support**: 
   - Custom image size (120x96px) with automatic cropping
   - Default image fallback
   - Lazy loading for better performance
 - **🔧 Flexible Configuration**:
   - Display subcategories or top-level categories
+  - **Auto mode**: Automatically detect current category
+  - **Direct children only**: Shows only 1 level of subcategories (no deep nesting)
   - Category exclusion (global and per-shortcode)
   - Category limit with "View All" button
   - Per-shortcode image display control
+  - **Per-shortcode settings**: Each shortcode can override all default settings
 - **🚀 Performance Optimized**:
   - Static caching for settings and images
   - Conditional asset loading
-  - Optimized database queries
+  - Optimized database queries (direct children only, no recursion)
+  - Request-level caching for category detection
   - Automatic cache clearing on category changes
+  - Minimal database impact
 
 ## 📦 Installation
 
@@ -64,18 +71,32 @@ For more control, use attributes:
 
 ### Shortcode Attributes
 
-The `[categories_grid]` shortcode supports the following attributes:
+The `[categories_grid]` shortcode supports the following attributes. **All attributes override default settings** when specified:
 
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `category_id` | integer | Settings default | Parent category ID for subcategories |
+| `auto` | boolean | `false` | Automatically detect current category and show its direct subcategories |
+| `category_id` | integer | Settings default | Parent category ID for subcategories (ignored if `auto="true"`) |
 | `type` | string | `subcategories` | Display type: `subcategories` or `top-level` |
 | `exclude` | string | - | Comma-separated category IDs to exclude (e.g., `"10,20,30"`) |
 | `show_images` | boolean | Settings default | Display category images (`true`/`false`) |
 | `limit` | integer | Settings default | Maximum categories to display (0 = no limit) |
+| `columns` | integer | Settings default | Number of columns (2-6) |
+| `style` | string | Settings default | Grid style: `classic`, `modern`, `minimal`, `card`, `text` |
+| `hover_effect` | boolean | Settings default | Enable hover effects (`true`/`false`) |
+| `image_radius` | integer | Settings default | Image border radius in pixels (0-50) |
+| `button_color` | string | Settings default | "View All" button color (hex code) |
 | `force_update` | boolean | `false` | Force cache refresh (`true`/`false`) |
 
 ### Examples
+
+#### Auto-Detect Current Category (Recommended)
+
+```php
+[categories_grid auto="true"]
+```
+
+Automatically detects the current category (from category archive page or single post) and displays **only direct subcategories** (1 level deep). If no subcategories exist, nothing is displayed. Perfect for category archive pages!
 
 #### Display Subcategories with Limit
 
@@ -84,6 +105,14 @@ The `[categories_grid]` shortcode supports the following attributes:
 ```
 
 Displays up to 10 subcategories of category ID 5. Shows "View All" button if more categories exist.
+
+#### Auto-Detect with Custom Settings
+
+```php
+[categories_grid auto="true" style="modern" columns="4" show_images="true"]
+```
+
+Auto-detects current category and displays with custom style, columns, and images. All shortcode parameters override default settings.
 
 #### Display Top-Level Categories
 
@@ -101,6 +130,14 @@ Displays all top-level categories without limit.
 
 Displays subcategories of category 5, excluding IDs 10 and 20, without images.
 
+#### Fully Customized Grid
+
+```php
+[categories_grid auto="true" style="card" columns="3" limit="6" hover_effect="true" button_color="#ff6b6b"]
+```
+
+Auto-detects category and displays with fully customized appearance.
+
 #### Force Cache Update
 
 ```php
@@ -108,6 +145,21 @@ Displays subcategories of category 5, excluding IDs 10 and 20, without images.
 ```
 
 Forces a cache refresh for the grid.
+
+### Auto Mode Details
+
+When using `auto="true"`:
+
+- **Automatic Detection**: The plugin automatically determines the current category from:
+  - Category archive pages (queried object)
+  - Single post pages (post's primary category)
+  - Current post in the loop
+  
+- **Direct Subcategories Only**: Shows **only 1 level** of subcategories (direct children). Nested subcategories are not displayed.
+
+- **No Subcategories**: If the current category has no direct subcategories, the shortcode returns empty (nothing displayed).
+
+- **Perfect for Category Pages**: Ideal for displaying subcategories on category archive pages without hardcoding category IDs.
 
 ## ⚙️ Settings
 
@@ -176,9 +228,15 @@ add_filter('scg_should_load_assets', function($should_load) {
 
 - **Static Caching**: Settings and images are cached statically to reduce database queries
 - **Conditional Asset Loading**: CSS only loads when shortcode is present
-- **Optimized Queries**: Efficient database queries with proper indexing
+- **Optimized Queries**: 
+  - Efficient database queries with proper indexing
+  - `update_term_meta_cache => false` to skip unnecessary meta queries
+  - Direct children only (no recursive queries)
+  - Cached current category detection
 - **Lazy Loading**: Images use `loading="lazy"` and `decoding="async"` attributes
-- **Cache Key Optimization**: Efficient cache key generation
+- **Cache Key Optimization**: Efficient cache key generation including all relevant settings
+- **Minimal Database Impact**: Only queries direct children, no deep hierarchy scanning
+- **Request-Level Caching**: Current category detection cached per request
 
 ### Image Handling
 
