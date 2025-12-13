@@ -58,7 +58,11 @@ class SmartCategoriesGrid {
     }
     
     private function loadSettings(): void {
-        $this->settings = get_option('scg_settings', []);
+        static $cached_settings = null;
+        if (null === $cached_settings) {
+            $cached_settings = get_option('scg_settings', []);
+        }
+        $this->settings = $cached_settings;
     }
     
     private function registerHooks(): void {
@@ -68,6 +72,11 @@ class SmartCategoriesGrid {
         add_action('admin_enqueue_scripts', [$this, 'adminAssets']);
         add_action('wp_enqueue_scripts', [$this, 'frontendAssets']);
         add_action('wp_ajax_scg_clear_cache', [$this, 'ajaxClearCache']);
+        
+        // Очистка кеша при изменении категорий
+        add_action('created_category', [$this, 'clearAllCache']);
+        add_action('edited_category', [$this, 'clearAllCache']);
+        add_action('delete_category', [$this, 'clearAllCache']);
         
         // Добавляем хук для регенерации миниатюр при активации плагина
         register_activation_hook(__FILE__, [$this, 'onActivation']);
@@ -131,36 +140,55 @@ class SmartCategoriesGrid {
     }
     
     private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
-        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5(implode(',', $exclude_ids)) . '_' . ($show_images ? 'img' : 'noimg') . '_' . $limit;
+        // Оптимизированная генерация ключа кеша
+        $exclude_str = empty($exclude_ids) ? '0' : implode(',', $exclude_ids);
+        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5($exclude_str) . '_' . ($show_images ? '1' : '0') . '_' . $limit;
         $output = get_transient($cacheKey);
         
         if (false === $output) {
             $output = $this->generateGrid($parent, $exclude_ids, $show_images, $limit);
             $cacheTime = $this->settings['cache_time'] ?? DAY_IN_SECONDS;
-            set_transient($cacheKey, $output, $cacheTime);
+            if ($cacheTime > 0) {
+                set_transient($cacheKey, $output, $cacheTime);
+            }
         }
         
         return $output;
     }
     
     private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
-        $categories = get_terms([
+        // Оптимизированный запрос с правильными параметрами
+        $args = [
             'taxonomy' => 'category',
             'parent' => $parent,
             'hide_empty' => false,
-            'orderby' => 'none',
-            'exclude' => $exclude_ids
-        ]);
+            'orderby' => 'name',
+            'order' => 'ASC',
+            'fields' => 'all'
+        ];
         
-        if (empty($categories) || is_wp_error($categories)) return '';
+        if (!empty($exclude_ids)) {
+            $args['exclude'] = $exclude_ids;
+        }
         
-        usort($categories, function ($a, $b) {
+        // Получаем все категории для подсчета общего количества (нужно для кнопки "View All")
+        $all_categories = get_terms($args);
+        
+        if (empty($all_categories) || is_wp_error($all_categories)) {
+            return '';
+        }
+        
+        // Дополнительная сортировка для точности
+        usort($all_categories, function ($a, $b) {
             return strcasecmp($a->name, $b->name);
         });
         
-        $total_categories = count($categories);
+        $total_categories = count($all_categories);
+        
+        // Применяем лимит если нужно
+        $categories = $all_categories;
         if ($limit > 0 && $total_categories > $limit) {
-            $categories = array_slice($categories, 0, $limit);
+            $categories = array_slice($all_categories, 0, $limit);
         }
         
         $grid_settings = [
@@ -169,26 +197,36 @@ class SmartCategoriesGrid {
             'hover_effect' => !empty($this->settings['hover_effect'])
         ];
         
-        ob_start(); ?>
-        <div class="scg-grid<?= $grid_settings['hover_effect'] ? ' has-hover' : ''; ?>" 
-             style="--scg-columns: <?= esc_attr($grid_settings['columns']); ?>;
-                    --scg-image-radius: <?= esc_attr($grid_settings['image_radius']); ?>px;
-                    --scg-button-color: <?= esc_attr($this->settings['button_color'] ?? '#b93434'); ?>;">
+        ob_start(); 
+        $hover_class = $grid_settings['hover_effect'] ? ' has-hover' : '';
+        $columns = absint($grid_settings['columns']);
+        $image_radius = absint($grid_settings['image_radius']);
+        $button_color = sanitize_hex_color($this->settings['button_color'] ?? '#b93434');
+        ?>
+        <div class="scg-grid<?php echo esc_attr($hover_class); ?>" 
+             style="--scg-columns: <?php echo esc_attr($columns); ?>;
+                    --scg-image-radius: <?php echo esc_attr($image_radius); ?>px;
+                    --scg-button-color: <?php echo esc_attr($button_color); ?>;">
             <?php foreach ($categories as $cat) : 
+                $term_link = get_term_link($cat);
+                if (is_wp_error($term_link)) {
+                    continue;
+                }
                 $image = $this->getCategoryImage($cat->term_id); ?>
                 <div class="scg-col">
-                    <div class="scg-card<?= $grid_settings['hover_effect'] ? ' has-hover' : ''; ?>">
+                    <div class="scg-card<?php echo esc_attr($hover_class); ?>">
                         <?php if ($show_images) : ?>
                             <div class="scg-image">
-                                <img src="<?= esc_url($image); ?>" 
-                                     alt="<?= esc_attr($cat->name); ?>" 
+                                <img src="<?php echo esc_url($image); ?>" 
+                                     alt="<?php echo esc_attr($cat->name); ?>" 
                                      width="120" 
                                      height="96"
-                                     loading="lazy">
+                                     loading="lazy"
+                                     decoding="async">
                             </div>
                         <?php endif; ?>
                         <div class="scg-title">
-                            <a href="<?= esc_url(get_term_link($cat)); ?>"><?= esc_html($cat->name); ?></a>
+                            <a href="<?php echo esc_url($term_link); ?>"><?php echo esc_html($cat->name); ?></a>
                         </div>
                     </div>
                 </div>
@@ -196,13 +234,16 @@ class SmartCategoriesGrid {
             <?php if ($limit > 0 && $total_categories > $limit) : 
                 if ($parent > 0) {
                     $view_all_url = get_term_link($parent);
+                    if (is_wp_error($view_all_url)) {
+                        $view_all_url = '';
+                    }
                 } else {
                     $view_all_url = $this->settings['view_all_url'] ?? '';
                 }
-                if (!empty($view_all_url) && !is_wp_error($view_all_url)) : ?>
+                if (!empty($view_all_url)) : ?>
                     <div class="scg-view-all">
-                        <a href="<?= esc_url($view_all_url); ?>" class="scg-view-all-link">
-                            <?php _e('View All', 'smart-cat-grid'); ?>
+                        <a href="<?php echo esc_url($view_all_url); ?>" class="scg-view-all-link">
+                            <?php esc_html_e('View All', 'smart-cat-grid'); ?>
                         </a>
                     </div>
                 <?php endif; ?>
@@ -215,18 +256,28 @@ class SmartCategoriesGrid {
      * Получает изображение категории с использованием кастомного размера
      */
     private function getCategoryImage(int $term_id): string {
+        // Кешируем результат для избежания повторных запросов
+        static $image_cache = [];
+        
+        if (isset($image_cache[$term_id])) {
+            return $image_cache[$term_id];
+        }
+        
         $image_id = get_term_meta($term_id, 'logo', true);
         
         if ($image_id && is_numeric($image_id)) {
             // Используем наш кастомный размер изображения
-            $image_url = wp_get_attachment_image_url($image_id, self::IMAGE_SIZE_NAME);
+            $image_url = wp_get_attachment_image_url((int)$image_id, self::IMAGE_SIZE_NAME);
             if ($image_url) {
+                $image_cache[$term_id] = $image_url;
                 return $image_url;
             }
         }
         
         // Возвращаем изображение по умолчанию
-        return $this->settings['default_image'] ?? plugins_url('assets/placeholder.png', __FILE__);
+        $default_image = $this->settings['default_image'] ?? plugins_url('assets/placeholder.png', __FILE__);
+        $image_cache[$term_id] = $default_image;
+        return $default_image;
     }
     
     public function addAdminMenu(): void {
@@ -509,63 +560,86 @@ class SmartCategoriesGrid {
     public function validateSettings(array $input): array {
         $output = [];
         
+        // Валидация default_category
         $output['default_category'] = isset($input['default_category']) 
             ? absint($input['default_category']) 
             : 0;
         
-        $exclude = isset($input['exclude_categories']) ? trim($input['exclude_categories']) : '';
+        // Валидация exclude_categories
+        $exclude = isset($input['exclude_categories']) ? trim(sanitize_text_field($input['exclude_categories'])) : '';
         if (!empty($exclude)) {
-            $ids = array_map('absint', array_filter(explode(',', $exclude)));
+            $ids = array_map('absint', array_filter(explode(',', $exclude), 'is_numeric'));
             $output['exclude_categories'] = implode(',', array_unique($ids));
         } else {
             $output['exclude_categories'] = '';
         }
         
+        // Валидация cache_time
         $output['cache_time'] = isset($input['cache_time'])
             ? absint($input['cache_time'])
             : DAY_IN_SECONDS;
         
-        $output['columns'] = isset($input['columns']) && in_array($input['columns'], range(self::MIN_COLUMNS, self::MAX_COLUMNS)) 
-            ? absint($input['columns']) 
+        // Валидация columns
+        $columns = isset($input['columns']) ? absint($input['columns']) : self::MAX_COLUMNS;
+        $output['columns'] = ($columns >= self::MIN_COLUMNS && $columns <= self::MAX_COLUMNS) 
+            ? $columns 
             : self::MAX_COLUMNS;
         
+        // Валидация image_radius
         $output['image_radius'] = isset($input['image_radius'])
             ? max(0, min(50, absint($input['image_radius'])))
             : 3;
         
+        // Валидация default_image
         $output['default_image'] = isset($input['default_image'])
             ? esc_url_raw($input['default_image'])
             : '';
         
+        // Валидация hover_effect
         $output['hover_effect'] = isset($input['hover_effect']) ? 1 : 0;
         
+        // Валидация default_show_images
         $output['default_show_images'] = isset($input['default_show_images']) ? 1 : 0;
         
-        $output['default_limit'] = isset($input['default_limit']) ? absint($input['default_limit']) : 0;
+        // Валидация default_limit
+        $output['default_limit'] = isset($input['default_limit']) ? max(0, absint($input['default_limit'])) : 0;
         
+        // Валидация view_all_url
         $output['view_all_url'] = isset($input['view_all_url']) ? esc_url_raw($input['view_all_url']) : '';
         
-        $output['button_color'] = isset($input['button_color']) ? sanitize_hex_color($input['button_color']) : '#b93434';
+        // Валидация button_color
+        $output['button_color'] = isset($input['button_color']) 
+            ? sanitize_hex_color($input['button_color']) 
+            : '#b93434';
         
+        // Очистка кеша опций
         wp_cache_delete('scg_settings', 'options');
         
+        // Очистка кеша сетки
         $this->clearAllCache();
         
         return $output;
     }
     
-    private function clearAllCache(): void {
+    public function clearAllCache(): void {
         global $wpdb;
         
-        $transients = $wpdb->get_col(
-            "SELECT option_name FROM {$wpdb->options} 
-             WHERE option_name LIKE '_transient_scg_cache_%'"
+        // Оптимизированный запрос для удаления всех транзиентов плагина
+        $pattern = $wpdb->esc_like('_transient_' . self::CACHE_PREFIX) . '%';
+        $transient_timeout_pattern = $wpdb->esc_like('_transient_timeout_' . self::CACHE_PREFIX) . '%';
+        
+        // Удаляем транзиенты и их таймауты одним запросом
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} 
+                 WHERE option_name LIKE %s OR option_name LIKE %s",
+                $pattern,
+                $transient_timeout_pattern
+            )
         );
         
-        foreach ($transients as $transient) {
-            $transient_name = str_replace('_transient_', '', $transient);
-            delete_transient($transient_name);
-        }
+        // Очищаем кеш опций WordPress
+        wp_cache_delete('alloptions', 'options');
     }
     
     public function adminAssets(string $hook): void {
@@ -609,12 +683,43 @@ class SmartCategoriesGrid {
     }
     
     public function frontendAssets(): void {
-        wp_enqueue_style(
-            'scg-front',
-            plugins_url('assets/front.css', __FILE__),
-            [],
-            filemtime(plugin_dir_path(__FILE__) . 'assets/front.css')
-        );
+        // Загружаем стили условно - проверяем наличие шорткода
+        global $post;
+        $should_load = false;
+        
+        // Проверяем основной контент поста
+        if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'categories_grid')) {
+            $should_load = true;
+        }
+        
+        // Проверяем виджеты текста
+        if (!$should_load) {
+            $widget_text = get_option('widget_text');
+            if (is_array($widget_text)) {
+                foreach ($widget_text as $widget) {
+                    if (isset($widget['text']) && has_shortcode($widget['text'], 'categories_grid')) {
+                        $should_load = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Если не найдено, загружаем всегда (для совместимости с виджетами и другими местами)
+        // Можно оптимизировать дальше, добавив флаг через фильтр
+        $should_load = apply_filters('scg_should_load_assets', $should_load);
+        
+        if ($should_load) {
+            $css_path = plugin_dir_path(__FILE__) . 'assets/front.css';
+            $css_version = file_exists($css_path) ? filemtime($css_path) : '1.0';
+            
+            wp_enqueue_style(
+                'scg-front',
+                plugins_url('assets/front.css', __FILE__),
+                [],
+                $css_version
+            );
+        }
     }
     
     public function ajaxClearCache(): void {
@@ -625,9 +730,3 @@ class SmartCategoriesGrid {
 }
 
 SmartCategoriesGrid::getInstance();
-
-function init_smart_categories_grid() {
-    return SmartCategoriesGrid::getInstance();
-}
-
-add_action('plugins_loaded', 'init_smart_categories_grid');
