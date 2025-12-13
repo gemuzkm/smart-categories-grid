@@ -174,15 +174,23 @@ class SmartCategoriesGrid {
             return $cached_category;
         }
         
-        // Try to get category from queried object (category archive page) - fastest method
-        $queried_object = get_queried_object();
+        // Priority 1: Category archive page (is_category() or is_tax('category'))
+        if (is_category()) {
+            $category = get_queried_object();
+            if ($category && isset($category->term_id)) {
+                $cached_category = (int) $category->term_id;
+                return $cached_category;
+            }
+        }
         
+        // Priority 2: Try to get category from queried object (any taxonomy archive)
+        $queried_object = get_queried_object();
         if ($queried_object && isset($queried_object->taxonomy) && $queried_object->taxonomy === 'category') {
             $cached_category = (int) $queried_object->term_id;
             return $cached_category;
         }
         
-        // Try to get category from single post
+        // Priority 3: Try to get category from single post
         if (is_single()) {
             $categories = get_the_category();
             if (!empty($categories) && isset($categories[0])) {
@@ -191,12 +199,30 @@ class SmartCategoriesGrid {
             }
         }
         
-        // Try to get category from post in loop
+        // Priority 4: Try to get category from post in loop
         global $post;
         if (is_a($post, 'WP_Post')) {
             $categories = get_the_category($post->ID);
             if (!empty($categories) && isset($categories[0])) {
                 $cached_category = (int) $categories[0]->term_id;
+                return $cached_category;
+            }
+        }
+        
+        // Priority 5: Try to get from query vars
+        global $wp_query;
+        if (isset($wp_query->query_vars['cat'])) {
+            $cat_id = absint($wp_query->query_vars['cat']);
+            if ($cat_id > 0) {
+                $cached_category = $cat_id;
+                return $cached_category;
+            }
+        }
+        
+        if (isset($wp_query->query_vars['category_name'])) {
+            $category = get_category_by_slug($wp_query->query_vars['category_name']);
+            if ($category && isset($category->term_id)) {
+                $cached_category = (int) $category->term_id;
                 return $cached_category;
             }
         }
@@ -832,12 +858,17 @@ class SmartCategoriesGrid {
     }
     
     public function frontendAssets(): void {
-        // Conditionally load styles - check for shortcode presence
+        // Check for shortcode presence in various places
         global $post;
         $should_load = false;
         
         // Check main post content
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'categories_grid')) {
+            $should_load = true;
+        }
+        
+        // Check if we're on a category archive page (where auto mode is commonly used)
+        if (!$should_load && is_category()) {
             $should_load = true;
         }
         
@@ -854,9 +885,40 @@ class SmartCategoriesGrid {
             }
         }
         
-        // If not found, load always (for compatibility with widgets and other places)
-        // Can be further optimized by adding a flag via filter
+        // Check page builder content (Elementor, Gutenberg blocks, etc.)
+        if (!$should_load && is_a($post, 'WP_Post')) {
+            // Check for shortcode in post meta (page builders often store content there)
+            $post_meta = get_post_meta($post->ID, '_elementor_data', true);
+            if (!empty($post_meta) && is_string($post_meta)) {
+                if (strpos($post_meta, 'categories_grid') !== false) {
+                    $should_load = true;
+                }
+            }
+            
+            // Check Gutenberg blocks
+            if (!$should_load && has_blocks($post->post_content)) {
+                if (has_block('core/shortcode', $post->post_content)) {
+                    $blocks = parse_blocks($post->post_content);
+                    foreach ($blocks as $block) {
+                        if ($block['blockName'] === 'core/shortcode' && 
+                            isset($block['innerHTML']) && 
+                            strpos($block['innerHTML'], 'categories_grid') !== false) {
+                            $should_load = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Allow filtering for custom implementations
         $should_load = apply_filters('scg_should_load_assets', $should_load);
+        
+        // Always load on category archives to ensure styles work with auto mode
+        // This is safe as CSS is small and cached
+        if (is_category() || is_tax('category')) {
+            $should_load = true;
+        }
         
         if ($should_load) {
             $css_path = plugin_dir_path(__FILE__) . 'assets/front.css';
