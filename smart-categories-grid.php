@@ -141,8 +141,9 @@ class SmartCategoriesGrid {
     
     private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit): string {
         // Optimized cache key generation
+        $style = $this->settings['grid_style'] ?? 'classic';
         $exclude_str = empty($exclude_ids) ? '0' : implode(',', $exclude_ids);
-        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5($exclude_str) . '_' . ($show_images ? '1' : '0') . '_' . $limit;
+        $cacheKey = self::CACHE_PREFIX . $parent . '_' . md5($exclude_str) . '_' . ($show_images ? '1' : '0') . '_' . $limit . '_' . $style;
         $output = get_transient($cacheKey);
         
         if (false === $output) {
@@ -194,16 +195,21 @@ class SmartCategoriesGrid {
         $grid_settings = [
             'columns' => $this->settings['columns'] ?? self::MAX_COLUMNS,
             'image_radius' => $this->settings['image_radius'] ?? 3,
-            'hover_effect' => !empty($this->settings['hover_effect'])
+            'hover_effect' => !empty($this->settings['hover_effect']),
+            'style' => $this->settings['grid_style'] ?? 'classic'
         ];
         
         ob_start(); 
         $hover_class = $grid_settings['hover_effect'] ? ' has-hover' : '';
+        $style_class = ' scg-style-' . esc_attr($grid_settings['style']);
         $columns = absint($grid_settings['columns']);
         $image_radius = absint($grid_settings['image_radius']);
         $button_color = sanitize_hex_color($this->settings['button_color'] ?? '#b93434');
+        
+        // For text style, always hide images
+        $display_images = ($grid_settings['style'] === 'text') ? false : $show_images;
         ?>
-        <div class="scg-grid<?php echo esc_attr($hover_class); ?>" 
+        <div class="scg-grid<?php echo esc_attr($hover_class . $style_class); ?>" 
              style="--scg-columns: <?php echo esc_attr($columns); ?>;
                     --scg-image-radius: <?php echo esc_attr($image_radius); ?>px;
                     --scg-button-color: <?php echo esc_attr($button_color); ?>;">
@@ -215,7 +221,7 @@ class SmartCategoriesGrid {
                 $image = $this->getCategoryImage($cat->term_id); ?>
                 <div class="scg-col">
                     <div class="scg-card<?php echo esc_attr($hover_class); ?>">
-                        <?php if ($show_images) : ?>
+                        <?php if ($display_images) : ?>
                             <div class="scg-image">
                                 <img src="<?php echo esc_url($image); ?>" 
                                      alt="<?php echo esc_attr($cat->name); ?>" 
@@ -429,6 +435,14 @@ class SmartCategoriesGrid {
             'scg-settings',
             'scg_display_section'
         );
+        
+        add_settings_field(
+            'grid_style',
+            __('Grid Style', 'smart-cat-grid'),
+            [$this, 'gridStyleField'],
+            'scg-settings',
+            'scg_display_section'
+        );
     }
     
     public function categorySelectField(): void {
@@ -555,6 +569,27 @@ class SmartCategoriesGrid {
         <?php 
     }
     
+    public function gridStyleField(): void {
+        $value = $this->settings['grid_style'] ?? 'classic';
+        $styles = [
+            'classic' => __('Classic', 'smart-cat-grid'),
+            'modern' => __('Modern', 'smart-cat-grid'),
+            'minimal' => __('Minimal', 'smart-cat-grid'),
+            'card' => __('Card', 'smart-cat-grid'),
+            'text' => __('Text Only', 'smart-cat-grid')
+        ];
+        ?>
+        <select name="scg_settings[grid_style]">
+            <?php foreach ($styles as $key => $label) : ?>
+                <option value="<?= esc_attr($key); ?>" <?= selected($value, $key, false); ?>>
+                    <?= esc_html($label); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <p class="description"><?php esc_html_e('Choose the visual style for the category grid.', 'smart-cat-grid'); ?></p>
+        <?php
+    }
+    
     public function validateSettings(array $input): array {
         $output = [];
         
@@ -609,6 +644,12 @@ class SmartCategoriesGrid {
         $output['button_color'] = isset($input['button_color']) 
             ? sanitize_hex_color($input['button_color']) 
             : '#b93434';
+        
+        // Validate grid_style
+        $valid_styles = ['classic', 'modern', 'minimal', 'card', 'text'];
+        $output['grid_style'] = isset($input['grid_style']) && in_array($input['grid_style'], $valid_styles, true)
+            ? sanitize_text_field($input['grid_style'])
+            : 'classic';
         
         // Clear options cache
         wp_cache_delete('scg_settings', 'options');
