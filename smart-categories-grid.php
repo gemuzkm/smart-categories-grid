@@ -18,6 +18,7 @@ class SmartCategoriesGrid {
     
     private array $settings;
     private static ?self $instance = null;
+    private static bool $shortcode_used = false; // Flag to track shortcode usage
     
     public static function getInstance(): self {
         if (null === self::$instance) {
@@ -70,6 +71,7 @@ class SmartCategoriesGrid {
         add_action('admin_menu', [$this, 'addAdminMenu']);
         add_action('admin_init', [$this, 'registerSettings']);
         add_action('admin_enqueue_scripts', [$this, 'adminAssets']);
+        add_action('wp', [$this, 'preCheckShortcode']); // Early check for shortcode presence
         add_action('wp_enqueue_scripts', [$this, 'frontendAssets']);
         add_action('wp_ajax_scg_clear_cache', [$this, 'ajaxClearCache']);
         
@@ -94,6 +96,15 @@ class SmartCategoriesGrid {
     }
     
     public function renderGrid(array $atts): string {
+        // Mark that shortcode is being used (for asset loading optimization)
+        self::$shortcode_used = true;
+        
+        // Ensure styles are loaded (in case shortcode executes after wp_enqueue_scripts)
+        // This handles edge cases where shortcode is in footer or loaded dynamically
+        if (!wp_style_is('scg-front', 'enqueued') && !wp_style_is('scg-front', 'done')) {
+            $this->enqueueStyles();
+        }
+        
         // Parse shortcode attributes with defaults from settings
         $atts = shortcode_atts([
             'category_id' => '',
@@ -857,80 +868,97 @@ class SmartCategoriesGrid {
         ]);
     }
     
-    public function frontendAssets(): void {
-        // Check for shortcode presence in various places
+    /**
+     * Pre-check for shortcode presence (runs early on 'wp' hook)
+     * This allows us to detect shortcode before wp_enqueue_scripts
+     */
+    public function preCheckShortcode(): void {
+        // If already detected, skip
+        if (self::$shortcode_used) {
+            return;
+        }
+        
         global $post;
-        $should_load = false;
+        $has_shortcode = false;
         
         // Check main post content
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'categories_grid')) {
-            $should_load = true;
-        }
-        
-        // Check if we're on a category archive page (where auto mode is commonly used)
-        if (!$should_load && is_category()) {
-            $should_load = true;
+            $has_shortcode = true;
         }
         
         // Check text widgets
-        if (!$should_load) {
+        if (!$has_shortcode) {
             $widget_text = get_option('widget_text');
             if (is_array($widget_text)) {
                 foreach ($widget_text as $widget) {
                     if (isset($widget['text']) && has_shortcode($widget['text'], 'categories_grid')) {
-                        $should_load = true;
+                        $has_shortcode = true;
                         break;
                     }
                 }
             }
         }
         
-        // Check page builder content (Elementor, Gutenberg blocks, etc.)
-        if (!$should_load && is_a($post, 'WP_Post')) {
-            // Check for shortcode in post meta (page builders often store content there)
+        // Check page builder content (Elementor)
+        if (!$has_shortcode && is_a($post, 'WP_Post')) {
             $post_meta = get_post_meta($post->ID, '_elementor_data', true);
-            if (!empty($post_meta) && is_string($post_meta)) {
-                if (strpos($post_meta, 'categories_grid') !== false) {
-                    $should_load = true;
-                }
+            if (!empty($post_meta) && is_string($post_meta) && strpos($post_meta, 'categories_grid') !== false) {
+                $has_shortcode = true;
             }
-            
-            // Check Gutenberg blocks
-            if (!$should_load && has_blocks($post->post_content)) {
-                if (has_block('core/shortcode', $post->post_content)) {
-                    $blocks = parse_blocks($post->post_content);
-                    foreach ($blocks as $block) {
-                        if ($block['blockName'] === 'core/shortcode' && 
-                            isset($block['innerHTML']) && 
-                            strpos($block['innerHTML'], 'categories_grid') !== false) {
-                            $should_load = true;
-                            break;
-                        }
+        }
+        
+        // Check Gutenberg blocks
+        if (!$has_shortcode && is_a($post, 'WP_Post') && has_blocks($post->post_content)) {
+            if (has_block('core/shortcode', $post->post_content)) {
+                $blocks = parse_blocks($post->post_content);
+                foreach ($blocks as $block) {
+                    if ($block['blockName'] === 'core/shortcode' && 
+                        isset($block['innerHTML']) && 
+                        strpos($block['innerHTML'], 'categories_grid') !== false) {
+                        $has_shortcode = true;
+                        break;
                     }
                 }
             }
         }
         
-        // Allow filtering for custom implementations
-        $should_load = apply_filters('scg_should_load_assets', $should_load);
+        // Allow filtering
+        $has_shortcode = apply_filters('scg_has_shortcode', $has_shortcode);
         
-        // Always load on category archives to ensure styles work with auto mode
-        // This is safe as CSS is small and cached
-        if (is_category() || is_tax('category')) {
-            $should_load = true;
+        if ($has_shortcode) {
+            self::$shortcode_used = true;
+        }
+    }
+    
+    public function frontendAssets(): void {
+        // Only load styles if shortcode is detected or was used
+        if (self::$shortcode_used) {
+            $this->enqueueStyles();
+        }
+    }
+    
+    /**
+     * Enqueues frontend styles (separated for reuse)
+     */
+    private function enqueueStyles(): void {
+        static $styles_enqueued = false;
+        
+        // Prevent double enqueuing
+        if ($styles_enqueued) {
+            return;
         }
         
-        if ($should_load) {
-            $css_path = plugin_dir_path(__FILE__) . 'assets/front.css';
-            $css_version = file_exists($css_path) ? filemtime($css_path) : '1.0';
-            
-            wp_enqueue_style(
-                'scg-front',
-                plugins_url('assets/front.css', __FILE__),
-                [],
-                $css_version
-            );
-        }
+        $css_path = plugin_dir_path(__FILE__) . 'assets/front.css';
+        $css_version = file_exists($css_path) ? filemtime($css_path) : '1.0';
+        
+        wp_enqueue_style(
+            'scg-front',
+            plugins_url('assets/front.css', __FILE__),
+            [],
+            $css_version
+        );
+        
+        $styles_enqueued = true;
     }
     
     public function ajaxClearCache(): void {
