@@ -1,52 +1,45 @@
 (function($) {
     'use strict';
-    
+
     const SCGAdmin = {
         init: function() {
-            this.bindEvents();
-        },
-        
-        bindEvents: function() {
-            // Используем делегирование событий для лучшей производительности
+            // FIX #13: event delegation only — removed ajaxComplete rebind loop
             $(document)
-                .off('click', '.scg-upload-image')
-                .on('click', '.scg-upload-image', this.handleMediaUpload.bind(this))
-                .off('click', '#scg-clear-cache')
-                .on('click', '#scg-clear-cache', this.handleClearCache.bind(this));
+                .on('click', '.scg-upload-image', this.handleMediaUpload)
+                .on('click', '#scg-clear-cache', this.handleClearCache);
         },
-        
+
+        // FIX #12: new wp.media frame per click — prevents closure capturing wrong input
         handleMediaUpload: function(e) {
             e.preventDefault();
-            const button = $(e.currentTarget);
-            
-            // Переиспользуем frame если он уже существует
-            if (!this.mediaFrame) {
-                this.mediaFrame = wp.media({
-                    title: scg_admin.i18n.upload_title,
-                    button: { text: scg_admin.i18n.use_image },
-                    multiple: false,
-                    library: { type: 'image' }
-                });
-                
-                this.mediaFrame.on('select', function() {
-                    const attachment = this.mediaFrame.state().get('selection').first().toJSON();
-                    button.siblings('input[type="url"]').val(attachment.url).trigger('change');
-                }.bind(this));
-            }
-            
-            this.mediaFrame.open();
+            const $button = $(this);
+            const $target = $button.siblings('input[type="url"]');
+
+            const frame = wp.media({
+                title: scg_admin.i18n.upload_title,
+                button: { text: scg_admin.i18n.use_image },
+                multiple: false,
+                library: { type: 'image' }
+            });
+
+            frame.on('select', function() {
+                const att = frame.state().get('selection').first().toJSON();
+                $target.val(att.url).trigger('change');
+            });
+
+            frame.open();
         },
-        
+
         handleClearCache: function(e) {
             e.preventDefault();
-            const button = $(e.currentTarget);
-            
+            const $btn = $(this);
+
             if (!confirm(scg_admin.i18n.clear_confirm)) {
                 return;
             }
-            
-            const originalText = button.text();
-            
+
+            const original = $btn.text();
+
             $.ajax({
                 url: ajaxurl,
                 method: 'POST',
@@ -55,60 +48,37 @@
                     nonce: scg_admin.nonce
                 },
                 beforeSend: function() {
-                    button.prop('disabled', true).text(scg_admin.i18n.clearing);
+                    $btn.prop('disabled', true).text(scg_admin.i18n.clearing);
                 },
                 success: function(response) {
-                    SCGAdmin.showAdminNotice(
+                    SCGAdmin.notice(
                         response.success ? 'success' : 'error',
-                        response.data ? response.data.message : scg_admin.i18n.clear_failed
+                        (response.data && response.data.message) ? response.data.message : scg_admin.i18n.clear_failed
                     );
                 },
                 error: function() {
-                    SCGAdmin.showAdminNotice('error', scg_admin.i18n.clear_failed);
+                    SCGAdmin.notice('error', scg_admin.i18n.clear_failed);
                 },
                 complete: function() {
-                    button.prop('disabled', false).text(originalText);
+                    $btn.prop('disabled', false).text(original);
                 }
             });
         },
-        
-        showAdminNotice: function(type, message) {
+
+        notice: function(type, msg) {
             $('.notice.scg-notice').remove();
-            
-            const notice = $('<div>', {
-                'class': 'notice notice-' + type + ' scg-notice is-dismissible',
-                html: '<p>' + this.escapeHtml(message) + '</p>'
-            });
-            
-            $('.scg-settings-wrap h1').first().after(notice);
-            
-            // Автоматическое скрытие через 5 секунд
+            const $n = $('<div>', {
+                'class': 'notice notice-' + type + ' scg-notice is-dismissible'
+            }).append($('<p>').text(msg));
+            $('.scg-settings-wrap h1').first().after($n);
             setTimeout(function() {
-                notice.fadeOut(500, function() {
-                    $(this).remove();
-                });
+                $n.fadeOut(500, function() { $(this).remove(); });
             }, 5000);
-        },
-        
-        escapeHtml: function(text) {
-            const map = {
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#039;'
-            };
-            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
         }
     };
-    
+
     $(document).ready(function() {
         SCGAdmin.init();
     });
-    
-    // Переинициализация после AJAX операций
-    $(document).ajaxComplete(function() {
-        SCGAdmin.bindEvents();
-    });
-    
+
 })(jQuery);

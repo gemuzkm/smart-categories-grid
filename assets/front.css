@@ -1,5 +1,5 @@
 /* ============================================
-   Smart Categories Grid - Base Styles
+   Smart Categories Grid - Base Styles (v2.0)
    ============================================ */
 
 .scg-grid {
@@ -68,7 +68,7 @@
 }
 
 .scg-title a:hover {
-    color: #b93434;
+    color: var(--scg-button-color, #b93434);
 }
 
 .scg-view-all {
@@ -85,11 +85,11 @@
     text-decoration: none;
     border-radius: 5px;
     font-weight: bold;
-    transition: background 0.3s ease;
+    transition: background 0.3s ease, filter 0.3s ease;
 }
 
 .scg-view-all-link:hover {
-    background: #a12e2e;
+    filter: brightness(0.9);
 }
 
 /* ============================================
@@ -114,7 +114,7 @@
 }
 
 .scg-style-classic .scg-title a:hover {
-    color: #b93434;
+    color: var(--scg-button-color, #b93434);
 }
 
 /* ============================================
@@ -175,7 +175,7 @@
     color: #2c3e50;
     font-weight: 600;
     font-size: 15px;
-    transition: color 0.3s ease, transform 0.3s ease;
+    transition: color 0.3s ease;
     position: relative;
 }
 
@@ -205,24 +205,6 @@
     box-shadow: 0 4px 15px rgba(185, 52, 52, 0.3);
     position: relative;
     overflow: hidden;
-}
-
-.scg-style-modern .scg-view-all-link::before {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.3);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s ease, height 0.6s ease;
-}
-
-.scg-style-modern .scg-view-all-link:hover::before {
-    width: 300px;
-    height: 300px;
 }
 
 /* ============================================
@@ -322,10 +304,7 @@
 .scg-style-card .scg-image::after {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    top: 0; left: 0; right: 0; bottom: 0;
     background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.1) 100%);
     opacity: 0;
     transition: opacity 0.3s ease;
@@ -392,8 +371,7 @@
 }
 
 .scg-style-card .scg-view-all-link::after {
-    content: '→';
-    margin-left: 8px;
+    content: ' →';
     transition: transform 0.3s ease;
     display: inline-block;
 }
@@ -413,10 +391,12 @@
 
 .scg-style-text .scg-grid {
     gap: 15px;
+    align-items: stretch;
 }
 
 .scg-style-text .scg-col {
     min-height: 60px;
+    display: flex;
 }
 
 .scg-style-text .scg-card {
@@ -431,6 +411,7 @@
     justify-content: center;
     min-height: 60px;
     height: 100%;
+    width: 100%;
 }
 
 .scg-style-text .scg-card.has-hover:hover {
@@ -464,24 +445,8 @@
     line-height: 1.5;
 }
 
-.scg-style-text .scg-title a::before {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 50%;
-    transform: translateX(-50%) scaleX(0);
-    width: 60%;
-    height: 2px;
-    background: var(--scg-button-color, #b93434);
-    transition: transform 0.3s ease;
-}
-
 .scg-style-text .scg-card.has-hover:hover .scg-title a {
     color: var(--scg-button-color, #b93434);
-}
-
-.scg-style-text .scg-card.has-hover:hover .scg-title a::before {
-    transform: translateX(-50%) scaleX(1);
 }
 
 .scg-style-text .scg-view-all {
@@ -497,19 +462,6 @@
     letter-spacing: 0.5px;
     box-shadow: 0 4px 12px rgba(185, 52, 52, 0.2);
     transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.scg-style-text .scg-view-all-link::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-    transition: left 0.5s ease;
 }
 
 .scg-style-text .scg-view-all-link:hover {
@@ -517,52 +469,31 @@
     box-shadow: 0 6px 20px rgba(185, 52, 52, 0.3);
 }
 
-.scg-style-text .scg-view-all-link:hover::before {
-    left: 100%;
-}
-
-/* Ensure equal height for text style */
-.scg-style-text .scg-grid {
-    align-items: stretch;
-}
-
-.scg-style-text .scg-col {
-    display: flex;
-}
-
-.scg-style-text .scg-card {
-    width: 100%;
-}
-
 /* ============================================
-   Responsive Styles
+   Responsive — FIX #9: no !important, respects --scg-columns
+   Uses CSS min() to cap columns at 2 on mobile, 3 on tablet
    ============================================ */
 
 @media (max-width: 767px) {
     .scg-grid {
-        grid-template-columns: repeat(2, 1fr) !important;
+        grid-template-columns: repeat(min(var(--scg-columns, 6), 2), 1fr);
         gap: 15px 10px;
     }
-    
     .scg-style-modern .scg-card,
     .scg-style-card .scg-card {
         padding: 15px;
     }
-    
     .scg-style-card .scg-image img {
         height: 100px;
     }
-    
     .scg-style-modern .scg-image img {
         width: 100px;
         height: 80px;
     }
-    
     .scg-style-text .scg-card {
         padding: 15px;
         min-height: 50px;
     }
-    
     .scg-style-text .scg-title a {
         font-size: 14px;
     }
@@ -570,13 +501,7 @@
 
 @media (min-width: 768px) and (max-width: 1024px) {
     .scg-grid {
-        grid-template-columns: repeat(3, 1fr) !important;
-    }
-}
-
-@media (min-width: 1025px) {
-    .scg-grid {
-        grid-template-columns: repeat(var(--scg-columns, 6), 1fr);
+        grid-template-columns: repeat(min(var(--scg-columns, 6), 3), 1fr);
     }
 }
 
@@ -595,7 +520,6 @@
     border-radius: 2px;
 }
 
-/* Reduce motion for users who prefer it */
 @media (prefers-reduced-motion: reduce) {
     .scg-card,
     .scg-image img,
