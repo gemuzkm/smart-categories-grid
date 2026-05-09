@@ -2,7 +2,7 @@
 /*
 Plugin Name: Smart Categories Grid
 Description: Responsive category grid with caching, advanced settings, category exclusion, optional image display, and category limit
-Version: 2.0
+Version: 2.0.1
 Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
@@ -10,8 +10,7 @@ Text Domain: smart-cat-grid
 
 defined('ABSPATH') || exit;
 
-// FIX #1: register_activation_hook must be at top-level, before any plugins_loaded hooks.
-// Previously it was inside registerHooks() called from init() on plugins_loaded — never fired.
+// register_activation_hook must be at top-level, before any plugins_loaded hooks.
 register_activation_hook(__FILE__, ['SmartCategoriesGrid', 'onActivationStatic']);
 
 class SmartCategoriesGrid {
@@ -19,7 +18,7 @@ class SmartCategoriesGrid {
     private const MIN_COLUMNS = 2;
     private const MAX_COLUMNS = 6;
     private const IMAGE_SIZE_NAME = 'scg-thumb';
-    private const VERSION = '2.0';
+    private const VERSION = '2.0.1';
 
     private array $settings;
     private static ?self $instance = null;
@@ -53,8 +52,6 @@ class SmartCategoriesGrid {
         ]);
     }
 
-    // FIX #2: removed static $cached_settings — it prevented settings from refreshing
-    // after save within the same request. get_option() is already cached by WordPress.
     private function loadSettings(): void {
         $this->settings = get_option('scg_settings', []);
     }
@@ -73,7 +70,6 @@ class SmartCategoriesGrid {
         add_action('delete_category', [$this, 'clearAllCache']);
     }
 
-    // Static activation handler — called before instance exists
     public static function onActivationStatic(): void {
         add_image_size(self::IMAGE_SIZE_NAME, 120, 96, true);
         add_option('scg_show_regenerate_notice', true);
@@ -168,7 +164,6 @@ class SmartCategoriesGrid {
             return $cached_category = (int) $q->term_id;
         }
 
-        // FIX #8: prefer Yoast/RankMath primary category; fallback to deepest by ancestry
         if (is_single()) {
             $post_id = get_the_ID();
             if ($post_id) {
@@ -241,11 +236,10 @@ class SmartCategoriesGrid {
             ? array_map('absint', array_filter(explode(',', $this->settings['exclude_categories'])))
             : [];
         $merged = array_unique(array_merge($local, $global));
-        sort($merged); // stable order for cache key
+        sort($merged);
         return $merged;
     }
 
-    // FIX #3: cache key now includes ALL params that affect rendered output
     private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): string {
         $key_parts = [
             $parent,
@@ -277,6 +271,10 @@ class SmartCategoriesGrid {
             'taxonomy'               => 'category',
             'parent'                 => $parent,
             'hide_empty'             => false,
+            // Ask DB to sort by name, but we CANNOT rely on it:
+            // when 'exclude' is used, WordPress wraps the query in a subquery
+            // that discards ORDER BY in MySQL 5.7+ / MariaDB 10.3+ strict mode.
+            // We enforce the order in PHP below via usort().
             'orderby'                => 'name',
             'order'                  => 'ASC',
             'hierarchical'           => false,
@@ -291,14 +289,19 @@ class SmartCategoriesGrid {
             return '';
         }
 
-        // FIX #11: get_terms already sorts by name — removed duplicate usort
+        // Guaranteed PHP-level sort: strcasecmp handles Unicode/multibyte names
+        // correctly (locale-aware, case-insensitive). This covers the case where
+        // DB ORDER BY is ignored due to subquery wrapping with 'exclude'.
+        usort($categories, function (WP_Term $a, WP_Term $b): int {
+            return strcasecmp($a->name, $b->name);
+        });
 
         $total = count($categories);
         if ($limit > 0 && $total > $limit) {
             $categories = array_slice($categories, 0, $limit);
         }
 
-        // FIX #10: for text style skip image queries entirely
+        // For text style skip image queries entirely
         $display_images = ($grid_settings['style'] === 'text') ? false : $show_images;
 
         ob_start();
@@ -368,8 +371,6 @@ class SmartCategoriesGrid {
             }
         }
 
-        // FIX #5: if placeholder.png is missing and no default set — return empty string
-        // so <img> is not rendered at all (no broken image)
         $default = $this->settings['default_image'] ?? '';
         if (!$default) {
             $placeholder = plugin_dir_path(__FILE__) . 'assets/placeholder.png';
@@ -444,7 +445,6 @@ class SmartCategoriesGrid {
         add_settings_field('grid_style',          __('Grid Style', 'smart-cat-grid'),             [$this, 'gridStyleField'],         'scg-settings', 'scg_display_section');
     }
 
-    // FIX #7: all admin fields now use esc_attr/esc_html instead of raw <?=
     public function categorySelectField(): void {
         wp_dropdown_categories([
             'show_option_none'  => __('Select a category', 'smart-cat-grid'),
@@ -591,7 +591,6 @@ class SmartCategoriesGrid {
         $style           = $input['grid_style'] ?? 'classic';
         $output['grid_style'] = in_array($style, $valid_styles, true) ? $style : 'classic';
 
-        // FIX #2 + #6: immediately update instance settings, properly clear caches
         $this->settings = $output;
         wp_cache_delete('scg_settings', 'options');
         wp_cache_delete('alloptions', 'options');
@@ -647,7 +646,6 @@ class SmartCategoriesGrid {
         ]);
     }
 
-    // FIX #14: also checks widget_block for Block Widgets (WP 5.8+)
     public function preCheckShortcode(): void {
         if (self::$shortcode_used) return;
 
@@ -658,7 +656,6 @@ class SmartCategoriesGrid {
             $found = true;
         }
 
-        // Classic text widgets
         if (!$found) {
             $widget_text = get_option('widget_text');
             if (is_array($widget_text)) {
@@ -671,7 +668,6 @@ class SmartCategoriesGrid {
             }
         }
 
-        // Block widgets (WP 5.8+)
         if (!$found) {
             $block_widgets = get_option('widget_block');
             if (is_array($block_widgets)) {
@@ -684,7 +680,6 @@ class SmartCategoriesGrid {
             }
         }
 
-        // Elementor
         if (!$found && is_a($post, 'WP_Post')) {
             $el = get_post_meta($post->ID, '_elementor_data', true);
             if (is_string($el) && strpos($el, 'categories_grid') !== false) {
@@ -692,7 +687,6 @@ class SmartCategoriesGrid {
             }
         }
 
-        // Gutenberg blocks
         if (!$found && is_a($post, 'WP_Post') && has_blocks($post->post_content)) {
             if (strpos($post->post_content, 'categories_grid') !== false) {
                 $found = true;
@@ -723,7 +717,6 @@ class SmartCategoriesGrid {
         $done = true;
     }
 
-    // FIX #4: added current_user_can check before clearing cache
     public function ajaxClearCache(): void {
         if (!current_user_can('manage_options')) {
             wp_send_json_error(['message' => __('Permission denied.', 'smart-cat-grid')], 403);
