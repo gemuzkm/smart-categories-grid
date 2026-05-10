@@ -1,5 +1,5 @@
 /* ============================================
-   Smart Categories Grid - Base Styles (v2.0)
+   Smart Categories Grid - Base Styles (v2.1)
    ============================================ */
 
 .scg-grid {
@@ -19,6 +19,8 @@
     background: #fff;
     border-radius: 3px;
     padding: 10px;
+    /* perf #3: explicit properties only — 'transition:all' forces the browser
+       to track every CSS property on every frame, hurting INP on slow devices */
     transition: transform 0.3s ease, box-shadow 0.3s ease;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     position: relative;
@@ -34,11 +36,18 @@
     box-shadow: 0 4px 15px rgba(0,0,0,0.15);
 }
 
+/* perf #8 (CLS): reserve layout space for the image before it loads.
+   aspect-ratio + background skeleton prevents cards from jumping in height
+   when the image arrives, eliminating layout shift (CLS penalty). */
 .scg-image {
     display: block;
     text-align: center;
     margin: 0 auto;
     flex-shrink: 0;
+    aspect-ratio: 120 / 96;
+    background: #f0f0f0;
+    border-radius: var(--scg-image-radius, 3px);
+    overflow: hidden;
 }
 
 .scg-image img {
@@ -46,7 +55,7 @@
     width: 120px;
     height: 96px;
     object-fit: cover;
-    background: #f5f5f5;
+    display: block;
 }
 
 .scg-title {
@@ -65,6 +74,8 @@
     text-decoration: none;
     display: block;
     text-align: center;
+    /* perf #3: specific property only */
+    transition: color 0.3s ease;
 }
 
 .scg-title a:hover {
@@ -85,6 +96,7 @@
     text-decoration: none;
     border-radius: 5px;
     font-weight: bold;
+    /* perf #3: specific properties only */
     transition: background 0.3s ease, filter 0.3s ease;
 }
 
@@ -121,6 +133,12 @@
    Modern Style
    ============================================ */
 
+/* perf #9 (INP): will-change promotes hover-animated cards to a GPU
+   compositing layer before the first interaction, preventing jank. */
+.scg-style-modern .scg-card.has-hover {
+    will-change: transform;
+}
+
 .scg-style-modern .scg-card {
     background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
     border-radius: 12px;
@@ -129,6 +147,8 @@
     border: 1px solid rgba(0,0,0,0.05);
     position: relative;
     overflow: hidden;
+    /* perf #3: specific properties only */
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .scg-style-modern .scg-card::before {
@@ -154,6 +174,8 @@
 
 .scg-style-modern .scg-image {
     margin-bottom: 15px;
+    /* override base aspect-ratio for modern layout which has wider images */
+    aspect-ratio: 120 / 96;
 }
 
 .scg-style-modern .scg-image img {
@@ -217,6 +239,7 @@
     padding: 15px;
     box-shadow: none;
     border: 1px solid #e0e0e0;
+    /* perf #3: specific properties only */
     transition: border-color 0.3s ease, background 0.3s ease;
 }
 
@@ -228,6 +251,7 @@
 
 .scg-style-minimal .scg-image {
     margin-bottom: 12px;
+    aspect-ratio: 120 / 96;
 }
 
 .scg-style-minimal .scg-image img {
@@ -266,7 +290,8 @@
     font-weight: 400;
     letter-spacing: 1px;
     text-transform: uppercase;
-    transition: all 0.3s ease;
+    /* perf #3: specific properties only */
+    transition: background 0.3s ease, color 0.3s ease, transform 0.3s ease;
 }
 
 .scg-style-minimal .scg-view-all-link:hover {
@@ -279,13 +304,19 @@
    Card Style
    ============================================ */
 
+/* perf #9 (INP): GPU layer promotion for hover-animated card-style cards */
+.scg-style-card .scg-card.has-hover {
+    will-change: transform;
+}
+
 .scg-style-card .scg-card {
     background: #fff;
     border-radius: 16px;
     padding: 0;
     box-shadow: 0 8px 30px rgba(0,0,0,0.12);
     overflow: hidden;
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    /* perf #3: specific properties only */
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     border: none;
 }
 
@@ -299,6 +330,11 @@
     margin: 0;
     overflow: hidden;
     position: relative;
+    /* perf #8 (CLS): card images are 100% wide × 140px tall in CSS;
+       aspect-ratio reserves the correct space before the image loads */
+    aspect-ratio: auto;       /* reset base 120/96 ratio */
+    background: #f0f0f0;     /* skeleton color while loading */
+    height: 140px;
 }
 
 .scg-style-card .scg-image::after {
@@ -371,7 +407,7 @@
 }
 
 .scg-style-card .scg-view-all-link::after {
-    content: ' →';
+    content: ' \2192';
     transition: transform 0.3s ease;
     display: inline-block;
 }
@@ -405,7 +441,8 @@
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0,0,0,0.08);
     border: 1px solid #e8e8e8;
-    transition: all 0.3s ease;
+    /* perf #3: specific properties only — was 'transition: all' */
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -440,7 +477,8 @@
     display: block;
     width: 100%;
     padding: 8px 0;
-    transition: all 0.3s ease;
+    /* perf #3: specific properties only — was 'transition: all' */
+    transition: color 0.3s ease;
     position: relative;
     line-height: 1.5;
 }
@@ -461,7 +499,8 @@
     font-weight: 600;
     letter-spacing: 0.5px;
     box-shadow: 0 4px 12px rgba(185, 52, 52, 0.2);
-    transition: all 0.3s ease;
+    /* perf #3: specific properties only */
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .scg-style-text .scg-view-all-link:hover {
@@ -470,8 +509,7 @@
 }
 
 /* ============================================
-   Responsive — FIX #9: no !important, respects --scg-columns
-   Uses CSS min() to cap columns at 2 on mobile, 3 on tablet
+   Responsive — respects --scg-columns via CSS min()
    ============================================ */
 
 @media (max-width: 767px) {
@@ -482,6 +520,9 @@
     .scg-style-modern .scg-card,
     .scg-style-card .scg-card {
         padding: 15px;
+    }
+    .scg-style-card .scg-image {
+        height: 100px;
     }
     .scg-style-card .scg-image img {
         height: 100px;
@@ -506,7 +547,7 @@
 }
 
 /* ============================================
-   Accessibility & Performance
+   Accessibility
    ============================================ */
 
 .scg-card:focus-within {
@@ -527,5 +568,6 @@
     .scg-view-all-link {
         transition: none !important;
         animation: none !important;
+        will-change: auto !important;
     }
 }
