@@ -2,7 +2,8 @@
 
 **Smart Categories Grid** is a WordPress plugin that displays categories in a responsive grid layout with advanced caching, customizable settings, category exclusion, optional image display, and category limit capabilities. Optimized for performance and designed for sites with a large number of categories.
 
-[![WordPress](https://img.shields.io/badge/WordPress-5.0%2B-blue.svg)](https://wordpress.org/)
+[![WordPress](https://img.shields.io/badge/WordPress-6.0%2B-blue.svg)](https://wordpress.org/)
+[![Tested up to](https://img.shields.io/badge/Tested%20up%20to-7.0-brightgreen.svg)](https://wordpress.org/)
 [![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)](https://php.net/)
 [![License](https://img.shields.io/badge/License-GPL%20v2-green.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
 
@@ -21,6 +22,7 @@
   - Custom image size (120x96px) with automatic cropping
   - Default image fallback
   - Lazy loading for better performance
+  - First image loaded eagerly with `fetchpriority=high` for optimal LCP
 - **🔧 Flexible Configuration**:
   - Display subcategories or top-level categories
   - **Auto mode**: Automatically detect current category
@@ -30,11 +32,13 @@
   - Per-shortcode image display control
   - **Per-shortcode settings**: Each shortcode can override all default settings
 - **🚀 Performance Optimized**:
-  - Static caching for settings and images
+  - Instance-level image cache shared across multiple shortcodes on the same page
+  - Asset file versions computed once at init (no repeated disk I/O)
   - Conditional asset loading
   - Optimized database queries (direct children only, no recursion)
   - Request-level caching for category detection
   - Automatic cache clearing on category changes
+  - Widget shortcode detection cached via transient (1 week)
   - Minimal database impact
 
 ## 📦 Installation
@@ -212,13 +216,13 @@ The plugin uses CSS custom properties for easy theming:
 
 #### Filters
 
-- `scg_should_load_assets` - Control frontend asset loading
+- `scg_has_shortcode` — Override shortcode detection result (useful for page builders)
 
 Example:
 ```php
-add_filter('scg_should_load_assets', function($should_load) {
-    // Custom logic to determine if assets should load
-    return $should_load;
+add_filter('scg_has_shortcode', function($found) {
+    // Force-load assets on specific pages
+    return $found || is_page('my-category-page');
 });
 ```
 
@@ -226,24 +230,26 @@ add_filter('scg_should_load_assets', function($should_load) {
 
 ### Performance Optimizations
 
-- **Static Caching**: Settings and images are cached statically to reduce database queries
+- **Instance-Level Image Cache**: Images are cached in an instance property shared across all shortcode calls on the same page
+- **Asset Version Pre-computation**: File mtimes computed once at plugin init, not on every `wp_enqueue_*` call
 - **Conditional Asset Loading**: CSS only loads when shortcode is present
 - **Optimized Queries**: 
   - Efficient database queries with proper indexing
   - `update_term_meta_cache => false` to skip unnecessary meta queries
   - Direct children only (no recursive queries)
   - Cached current category detection
-- **Lazy Loading**: Images use `loading="lazy"` and `decoding="async"` attributes
+- **LCP-Optimized Images**: First image uses `loading="eager"` + `fetchpriority="high"`; all others use `loading="lazy" decoding="async"`
+- **CLS Prevention**: Correct `width`/`height` attributes and `aspect-ratio` CSS prevent layout shifts before images load
+- **Widget Transient Cache**: Widget shortcode scan result cached for 1 week to avoid repeated DB reads
 - **Cache Key Optimization**: Efficient cache key generation including all relevant settings
 - **Minimal Database Impact**: Only queries direct children, no deep hierarchy scanning
-- **Request-Level Caching**: Current category detection cached per request
 
 ### Image Handling
 
 - Custom image size: `scg-thumb` (120x96px, hard crop)
 - Automatic image size registration
-- Fallback to default image if category image not found
-- Image caching per request
+- Fallback to `assets/placeholder.png` if no category image and no default image set
+- Image caching per request (instance-level)
 
 ### Cache System
 
@@ -259,7 +265,8 @@ smart-categories-grid/
 ├── assets/
 │   ├── admin.css          # Admin panel styles
 │   ├── admin.js           # Admin panel JavaScript
-│   └── front.css          # Frontend grid styles
+│   ├── front.css          # Frontend grid styles
+│   └── placeholder.png    # Default category image placeholder
 ├── languages/
 │   └── sc-grid.pot        # Translation template
 ├── smart-categories-grid.php  # Main plugin file
@@ -280,7 +287,8 @@ The plugin is translation-ready and includes `.pot` file for translations. Text 
 
 ## ✅ Compatibility
 
-- **WordPress**: 5.0+
+- **WordPress**: 6.0+
+- **Tested up to**: 7.0
 - **PHP**: 7.4+
 - **Themes**: Compatible with most WordPress themes
 - **Caching Plugins**: Works with object cache plugins (Redis, Memcached, etc.)
@@ -292,6 +300,7 @@ The plugin is translation-ready and includes `.pot` file for translations. Text 
 1. Check if category has an image set in term meta with key `logo`
 2. Regenerate thumbnails using "Regenerate Thumbnails" plugin
 3. Verify default image URL in settings
+4. Check that `assets/placeholder.png` exists in the plugin folder
 
 ### Cache Not Clearing
 
@@ -307,13 +316,25 @@ The plugin is translation-ready and includes `.pot` file for translations. Text 
 
 ## 📝 Changelog
 
-### Version 1.9
+### Version 2.1.0
+- **WordPress 7.0 compatibility**: Updated `Requires at least` to 6.0 and `Tested up to` to 7.0
+- **LCP fix**: First image now uses `loading="eager"` + `fetchpriority="high"`
+- **CLS fix**: Correct `width`/`height` per style; `aspect-ratio` skeleton in CSS
+- **INP fix**: Replaced all `transition: all` with explicit CSS properties; added `will-change: transform` for GPU layer on hover-capable styles
+- **TTFB fix**: Asset versions computed once at init; image cache moved to instance property; widget transient cache (1 week); `deepestCategory()` pre-computes depth map
+- **PHP**: Minimum PHP version tag added to plugin header (`Requires PHP: 7.4`)
+
+### Version 2.0.1
 - Performance optimizations
 - Improved caching system
 - Enhanced security (escaping, sanitization)
 - Code refactoring and optimization
-- Removed unused files
-- Updated documentation
+
+### Version 1.9
+- Initial stable release
+- Responsive grid layout
+- Shortcode with multiple attributes
+- Admin settings page
 
 ## 🤝 Contributing
 

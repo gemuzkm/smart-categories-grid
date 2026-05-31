@@ -6,6 +6,11 @@ Version: 2.1.0
 Author: TM
 Author URI: your-site.com
 Text Domain: smart-cat-grid
+Requires at least: 6.0
+Tested up to: 7.0
+Requires PHP: 7.4
+License: GPL v2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
 
 defined('ABSPATH') || exit;
@@ -322,15 +327,11 @@ class SmartCategoriesGrid {
                 $image = $display_images ? $this->getCategoryImage($cat->term_id) : '';
 
                 // perf #1 (LCP): first visible image must NOT be lazy-loaded
-                // and should have fetchpriority=high so the browser fetches it
-                // as early as possible — it is very likely the LCP element.
                 $is_first   = ($index === 0);
                 $loading    = $is_first ? 'eager' : 'lazy';
                 $fetchprio  = $is_first ? ' fetchpriority="high"' : '';
 
-                // perf #2 (CLS): card style renders images at 100%×140px via CSS;
-                // emit the correct intrinsic dimensions so the browser can
-                // reserve the right layout space before the image loads.
+                // perf #2 (CLS): card style renders images at 100%x140px via CSS
                 $img_w = $is_card_style ? '' : ' width="120"';
                 $img_h = $is_card_style ? '' : ' height="96"';
                 $index++;
@@ -373,8 +374,6 @@ class SmartCategoriesGrid {
         return ob_get_clean();
     }
 
-    // perf #5: use instance property instead of static local so cache is shared
-    // across multiple [categories_grid] shortcodes on the same page.
     private function getCategoryImage(int $term_id): string {
         if (isset($this->image_cache[$term_id])) {
             return $this->image_cache[$term_id];
@@ -597,7 +596,7 @@ class SmartCategoriesGrid {
         $this->settings = $output;
         wp_cache_delete('scg_settings', 'options');
         wp_cache_delete('alloptions', 'options');
-        delete_transient(self::WIDGET_CACHE_KEY); // invalidate widget shortcode detection cache
+        delete_transient(self::WIDGET_CACHE_KEY);
         $this->clearAllCache();
 
         return $output;
@@ -623,7 +622,6 @@ class SmartCategoriesGrid {
         wp_enqueue_script('wp-color-picker');
         wp_add_inline_script('wp-color-picker', 'jQuery(function($){ $(".scg-color-picker").wpColorPicker(); });');
 
-        // perf #4: use pre-computed versions — no file_exists()/filemtime() here
         wp_enqueue_style('scg-admin',
             plugins_url('assets/admin.css', __FILE__), [],
             $this->asset_versions['admin.css']);
@@ -648,27 +646,21 @@ class SmartCategoriesGrid {
         ]);
     }
 
-    // perf #10: widget/block-widget option reads are skipped when the shortcode
-    // is already found in the post content. The widget check result is also
-    // cached in a transient for 1 week to avoid repeated DB hits on every page load.
     public function preCheckShortcode(): void {
         if (self::$shortcode_used) return;
 
         global $post;
         $found = false;
 
-        // Fast path: check post content first (no DB hit beyond WP's own query)
         if (is_a($post, 'WP_Post') && has_shortcode($post->post_content, 'categories_grid')) {
             $found = true;
         }
 
-        // Gutenberg blocks inside post content
         if (!$found && is_a($post, 'WP_Post') && has_blocks($post->post_content)
             && strpos($post->post_content, 'categories_grid') !== false) {
             $found = true;
         }
 
-        // Elementor meta
         if (!$found && is_a($post, 'WP_Post')) {
             $el = get_post_meta($post->ID, '_elementor_data', true);
             if (is_string($el) && strpos($el, 'categories_grid') !== false) {
@@ -676,8 +668,6 @@ class SmartCategoriesGrid {
             }
         }
 
-        // Widget check — guarded by transient so we only scan widget options once
-        // per week instead of on every single frontend page load.
         if (!$found) {
             $widget_cached = get_transient(self::WIDGET_CACHE_KEY);
             if ($widget_cached === false) {
@@ -717,7 +707,6 @@ class SmartCategoriesGrid {
         static $done = false;
         if ($done) return;
 
-        // perf #4: pre-computed version, no disk I/O here
         wp_enqueue_style(
             'scg-front',
             plugins_url('assets/front.css', __FILE__),
