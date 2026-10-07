@@ -1,0 +1,356 @@
+# Copyright (C) 2026 TM
+# This file is distributed under the GPL v2 or later.
+msgid ""
+msgstr ""
+"Project-Id-Version: Smart Categories Grid 2.3.0\n"
+"Report-Msgid-Bugs-To: https://github.com/gemuzkm/smart-categories-grid/issues\n"
+"POT-Creation-Date: 2026-10-07 17:45+0000\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"X-Domain: smart-cat-grid\n"
+
+#: smart-categories-grid.php:139 block/index.js:145
+msgid "Auto mode: subcategories of the current category will be rendered on the front end."
+msgstr ""
+
+#: smart-categories-grid.php:159
+msgid "Category Grid (120x96)"
+msgstr ""
+
+#: smart-categories-grid.php:541
+msgid "View All"
+msgstr ""
+
+#: smart-categories-grid.php:628 smart-categories-grid.php:638
+msgid "Categories Grid Settings"
+msgstr ""
+
+#: smart-categories-grid.php:629 block/index.js:144 block/index.js:154
+msgid "Categories Grid"
+msgstr ""
+
+#: smart-categories-grid.php:642
+msgid "Plugin activated! For best image quality, please regenerate thumbnails using a plugin like \"Regenerate Thumbnails\"."
+msgstr ""
+
+#: smart-categories-grid.php:651
+msgid "Save Changes"
+msgstr ""
+
+#: smart-categories-grid.php:656
+msgid "Image Size Information"
+msgstr ""
+
+#: smart-categories-grid.php:657
+msgid "This plugin registers two image sizes: 120x96 (1x) and 240x192 (2x for Retina displays). New uploads are resized automatically."
+msgstr ""
+
+#: smart-categories-grid.php:658
+msgid "For existing images, regenerate thumbnails using a plugin like \"Regenerate Thumbnails\"."
+msgstr ""
+
+#: smart-categories-grid.php:662
+msgid "Usage"
+msgstr ""
+
+#: smart-categories-grid.php:663
+msgid "Block editor: add the \"Categories Grid\" block and configure it in the sidebar."
+msgstr ""
+
+#: smart-categories-grid.php:664
+msgid "Shortcodes: [categories_grid type=\"top-level\"], [categories_grid category_id=\"X\"], [categories_grid auto=\"true\" limit=\"200\"]. Use exclude=\"X,Y\", show_images=\"false\", limit=\"N\" as needed."
+msgstr ""
+
+#: smart-categories-grid.php:676
+msgid "General Settings"
+msgstr ""
+
+#: smart-categories-grid.php:677
+msgid "Default Category"
+msgstr ""
+
+#: smart-categories-grid.php:678
+msgid "Exclude Categories"
+msgstr ""
+
+#: smart-categories-grid.php:679
+msgid "Cache Duration"
+msgstr ""
+
+#: smart-categories-grid.php:680
+msgid "Default Category Limit"
+msgstr ""
+
+#: smart-categories-grid.php:681
+msgid "View All URL"
+msgstr ""
+
+#: smart-categories-grid.php:683
+msgid "Display Settings"
+msgstr ""
+
+#: smart-categories-grid.php:684
+msgid "Default Columns"
+msgstr ""
+
+#: smart-categories-grid.php:685
+msgid "Image Border Radius"
+msgstr ""
+
+#: smart-categories-grid.php:686
+msgid "Hover Effect"
+msgstr ""
+
+#: smart-categories-grid.php:687
+msgid "Default Image"
+msgstr ""
+
+#: smart-categories-grid.php:688
+msgid "Show Images by Default"
+msgstr ""
+
+#: smart-categories-grid.php:689
+msgid "Button Color"
+msgstr ""
+
+#: smart-categories-grid.php:690
+msgid "Grid Style"
+msgstr ""
+
+#: smart-categories-grid.php:695
+msgid "Select a category"
+msgstr ""
+
+#: smart-categories-grid.php:707
+msgid "Comma-separated category IDs to exclude (e.g., 10,20,30)."
+msgstr ""
+
+#: smart-categories-grid.php:713
+msgid "1 Hour"
+msgstr ""
+
+#: smart-categories-grid.php:714
+msgid "12 Hours"
+msgstr ""
+
+#: smart-categories-grid.php:715
+msgid "1 Day"
+msgstr ""
+
+#: smart-categories-grid.php:716
+msgid "1 Week"
+msgstr ""
+
+#: smart-categories-grid.php:717
+msgid "No Caching"
+msgstr ""
+
+#: smart-categories-grid.php:724 smart-categories-grid.php:867
+msgid "Clear Cache"
+msgstr ""
+
+#: smart-categories-grid.php:731 block/index.js:97
+msgid "Columns"
+msgstr ""
+
+#: smart-categories-grid.php:745
+msgid "Enable hover effects"
+msgstr ""
+
+#: smart-categories-grid.php:752 smart-categories-grid.php:868
+msgid "Select Image"
+msgstr ""
+
+#: smart-categories-grid.php:759
+msgid "Show images by default"
+msgstr ""
+
+#: smart-categories-grid.php:761
+msgid "If checked, images will be shown unless overridden by the shortcode."
+msgstr ""
+
+#: smart-categories-grid.php:767
+msgid "Default number of categories to display. 0 = no limit."
+msgstr ""
+
+#: smart-categories-grid.php:773
+msgid "URL for the \"View All\" button for top-level categories. Leave empty to hide."
+msgstr ""
+
+#: smart-categories-grid.php:779
+msgid "Color for the \"View All\" button."
+msgstr ""
+
+#: smart-categories-grid.php:785 block/index.js:88
+msgid "Classic"
+msgstr ""
+
+#: smart-categories-grid.php:786 block/index.js:89
+msgid "Modern"
+msgstr ""
+
+#: smart-categories-grid.php:787 block/index.js:90
+msgid "Minimal"
+msgstr ""
+
+#: smart-categories-grid.php:788 block/index.js:91
+msgid "Card"
+msgstr ""
+
+#: smart-categories-grid.php:789 block/index.js:92
+msgid "Text Only"
+msgstr ""
+
+#: smart-categories-grid.php:796
+msgid "Visual style for the category grid."
+msgstr ""
+
+#: smart-categories-grid.php:865
+msgid "Are you sure?"
+msgstr ""
+
+#: smart-categories-grid.php:866
+msgid "Clearing..."
+msgstr ""
+
+#: smart-categories-grid.php:869
+msgid "Use This Image"
+msgstr ""
+
+#: smart-categories-grid.php:870
+msgid "Settings saved successfully!"
+msgstr ""
+
+#: smart-categories-grid.php:871
+msgid "Failed to clear cache"
+msgstr ""
+
+#: smart-categories-grid.php:950
+msgid "Permission denied."
+msgstr ""
+
+#: smart-categories-grid.php:955
+msgid "Cache cleared successfully!"
+msgstr ""
+
+#: block/index.js:15
+msgid "Default (from settings)"
+msgstr ""
+
+#: block/index.js:44
+msgid "Source"
+msgstr ""
+
+#: block/index.js:46
+msgid "Auto-detect current category"
+msgstr ""
+
+#: block/index.js:47
+msgid "Shows direct subcategories of the category being viewed. Preview is not available in the editor."
+msgstr ""
+
+#: block/index.js:52 block/index.js:82
+msgid "Display"
+msgstr ""
+
+#: block/index.js:55
+msgid "Subcategories of a category"
+msgstr ""
+
+#: block/index.js:56
+msgid "Top-level categories"
+msgstr ""
+
+#: block/index.js:61
+msgid "Parent category"
+msgstr ""
+
+#: block/index.js:67
+msgid "Exclude category IDs"
+msgstr ""
+
+#: block/index.js:68
+msgid "Comma-separated, e.g. 10,20,30"
+msgstr ""
+
+#: block/index.js:73
+msgid "Limit"
+msgstr ""
+
+#: block/index.js:74
+msgid "Leave empty to use the default. 0 = no limit."
+msgstr ""
+
+#: block/index.js:84
+msgid "Style"
+msgstr ""
+
+#: block/index.js:105
+msgid "Images"
+msgstr ""
+
+#: block/index.js:109
+msgid "Show"
+msgstr ""
+
+#: block/index.js:110
+msgid "Hide"
+msgstr ""
+
+#: block/index.js:115
+msgid "Hover effect"
+msgstr ""
+
+#: block/index.js:119
+msgid "Enabled"
+msgstr ""
+
+#: block/index.js:120
+msgid "Disabled"
+msgstr ""
+
+#: block/index.js:125
+msgid "Image border radius (px)"
+msgstr ""
+
+#: block/index.js:133
+msgid "Button color (hex)"
+msgstr ""
+
+#: block/index.js:155
+msgid "No categories found for the selected source."
+msgstr ""
+
+#: block/block.json
+msgctxt "block title"
+msgid "Categories Grid"
+msgstr ""
+
+#: block/block.json
+msgctxt "block description"
+msgid "Responsive grid of categories or subcategories with images, caching and five visual styles."
+msgstr ""
+
+#: block/block.json
+msgctxt "block keyword"
+msgid "categories"
+msgstr ""
+
+#: block/block.json
+msgctxt "block keyword"
+msgid "subcategories"
+msgstr ""
+
+#: block/block.json
+msgctxt "block keyword"
+msgid "grid"
+msgstr ""
+
+#: block/block.json
+msgctxt "block keyword"
+msgid "taxonomy"
+msgstr ""

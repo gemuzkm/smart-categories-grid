@@ -3,7 +3,7 @@
 Plugin Name: Smart Categories Grid
 Plugin URI: https://github.com/gemuzkm/smart-categories-grid
 Description: Responsive category grid with caching, advanced settings, category exclusion, optional image display, and category limit
-Version: 2.2.0
+Version: 2.3.0
 Author: TM
 Author URI: https://github.com/gemuzkm
 Text Domain: smart-cat-grid
@@ -31,7 +31,10 @@ class SmartCategoriesGrid {
     private const IMAGE_W            = 120;
     private const IMAGE_H            = 96;
     private const IMAGE_META_KEY     = 'logo';
-    private const VERSION            = '2.2.0';
+    private const STYLE_HANDLE       = 'scg-front';
+    private const BLOCK_SCRIPT       = 'scg-block-editor';
+    private const BLOCK_NAME         = 'smart-cat-grid/categories-grid';
+    private const VERSION            = '2.3.0';
 
     private array $settings = [];
     private array $image_cache    = [];
@@ -51,7 +54,9 @@ class SmartCategoriesGrid {
 
     private function __construct() {
         add_action('plugins_loaded',    [$this, 'init']);
-        add_action('init',              [$this, 'loadTextdomain']);
+        add_action('init',              [$this, 'loadTextdomain'], 5);
+        add_action('init',              [$this, 'registerAssets'], 5);
+        add_action('init',              [$this, 'registerBlock']);
         add_action('after_setup_theme', [$this, 'addImageSizes']);
     }
 
@@ -67,25 +72,80 @@ class SmartCategoriesGrid {
     }
 
     private function computeAssetVersions(): void {
-        $base = plugin_dir_path(__FILE__) . 'assets/';
-        foreach (['front.css', 'front.min.css', 'admin.css', 'admin.js'] as $file) {
+        $base = plugin_dir_path(__FILE__);
+        foreach (['assets/front.css', 'assets/front.min.css', 'assets/admin.css', 'assets/admin.js', 'block/index.js'] as $file) {
             $path = $base . $file;
             $this->asset_versions[$file] = file_exists($path) ? (string) filemtime($path) : '';
         }
     }
 
-    // Resolved once per request instead of a file_exists() per category.
-    private function computePlaceholderUrl(): void {
-        $url = '';
-        if (file_exists(plugin_dir_path(__FILE__) . 'assets/placeholder.png')) {
-            $url = plugins_url('assets/placeholder.png', __FILE__);
+    private function assetVersion(string $file): string {
+        return ($this->asset_versions[$file] ?? '') ?: self::VERSION;
+    }
+
+    private function frontStyleFile(): string {
+        $use_min = !(defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) && ($this->asset_versions['assets/front.min.css'] ?? '') !== '';
+        return $use_min ? 'assets/front.min.css' : 'assets/front.css';
+    }
+
+    /**
+     * Register (not enqueue) front-end style and block editor script so that
+     * block.json can reference them by handle. The shortcode path enqueues the
+     * same handle, so the stylesheet is never loaded twice.
+     */
+    public function registerAssets(): void {
+        $file = $this->frontStyleFile();
+        wp_register_style(self::STYLE_HANDLE, plugins_url($file, __FILE__), [], $this->assetVersion($file));
+
+        wp_register_script(
+            self::BLOCK_SCRIPT,
+            plugins_url('block/index.js', __FILE__),
+            ['wp-blocks', 'wp-element', 'wp-block-editor', 'wp-components', 'wp-i18n', 'wp-core-data', 'wp-server-side-render'],
+            $this->assetVersion('block/index.js'),
+            true
+        );
+        wp_set_script_translations(self::BLOCK_SCRIPT, 'smart-cat-grid', plugin_dir_path(__FILE__) . 'languages');
+    }
+
+    public function registerBlock(): void {
+        if (!function_exists('register_block_type')) return;
+        register_block_type(plugin_dir_path(__FILE__) . 'block', [
+            'render_callback' => [$this, 'renderBlock'],
+        ]);
+    }
+
+    /**
+     * Dynamic block renderer: maps block attributes onto the shortcode attributes
+     * so both entry points share one code path (and one cache).
+     */
+    public function renderBlock(array $attributes, string $content = '', $block = null): string {
+        $atts = [
+            'auto'         => !empty($attributes['auto']) ? 'true' : 'false',
+            'type'         => (string) ($attributes['type'] ?? 'subcategories'),
+            'category_id'  => (string) absint($attributes['categoryId'] ?? 0),
+            'exclude'      => (string) ($attributes['exclude'] ?? ''),
+            'show_images'  => (string) ($attributes['showImages'] ?? ''),
+            'limit'        => (string) ($attributes['limit'] ?? ''),
+            'columns'      => (string) ($attributes['columns'] ?? ''),
+            'style'        => (string) ($attributes['style'] ?? ''),
+            'hover_effect' => (string) ($attributes['hoverEffect'] ?? ''),
+            'image_radius' => (string) ($attributes['imageRadius'] ?? ''),
+            'button_color' => (string) ($attributes['buttonColor'] ?? ''),
+        ];
+
+        $is_editor_preview = defined('REST_REQUEST') && REST_REQUEST && is_user_logged_in();
+
+        if ($atts['auto'] === 'true' && $is_editor_preview) {
+            $grid = '<p class="scg-editor-note">' . esc_html__('Auto mode: subcategories of the current category will be rendered on the front end.', 'smart-cat-grid') . '</p>';
+        } else {
+            $grid = $this->renderGrid($atts);
         }
-        /**
-         * Filter the fallback image URL used when a category has no image.
-         *
-         * @param string $url Placeholder image URL ('' disables the fallback).
-         */
-        $this->placeholder_url = (string) apply_filters('scg_placeholder_image', $url);
+
+        if ($grid === '') {
+            return '';
+        }
+
+        return '<div ' . get_block_wrapper_attributes() . '>' . $grid . '</div>';
     }
 
     public function addImageSizes(): void {
@@ -103,6 +163,20 @@ class SmartCategoriesGrid {
     private function loadSettings(): void {
         $settings       = get_option('scg_settings', []);
         $this->settings = is_array($settings) ? $settings : [];
+    }
+
+    // Resolved once per request instead of a file_exists() per category.
+    private function computePlaceholderUrl(): void {
+        $url = '';
+        if (file_exists(plugin_dir_path(__FILE__) . 'assets/placeholder.png')) {
+            $url = plugins_url('assets/placeholder.png', __FILE__);
+        }
+        /**
+         * Filter the fallback image URL used when a category has no image.
+         *
+         * @param string $url Placeholder image URL ('' disables the fallback).
+         */
+        $this->placeholder_url = (string) apply_filters('scg_placeholder_image', $url);
     }
 
     private function registerHooks(): void {
@@ -150,7 +224,7 @@ class SmartCategoriesGrid {
     public function renderGrid($atts): string {
         self::$shortcode_used = true;
 
-        if (!wp_style_is('scg-front', 'enqueued') && !wp_style_is('scg-front', 'done')) {
+        if (!wp_style_is(self::STYLE_HANDLE, 'enqueued') && !wp_style_is(self::STYLE_HANDLE, 'done')) {
             $this->enqueueStyles();
         }
 
@@ -198,9 +272,14 @@ class SmartCategoriesGrid {
         $force_update = filter_var($atts['force_update'], FILTER_VALIDATE_BOOLEAN);
         $columns      = max(self::MIN_COLUMNS, min(self::MAX_COLUMNS, $columns));
 
+        $valid_styles = ['classic', 'modern', 'minimal', 'card', 'text'];
+        if (!in_array($style, $valid_styles, true)) {
+            $style = 'classic';
+        }
+
         $grid_settings = [
             'columns'      => $columns,
-            'image_radius' => $image_radius,
+            'image_radius' => min(50, $image_radius),
             'hover_effect' => $hover_effect,
             'style'        => $style,
             'button_color' => $button_color,
@@ -581,6 +660,7 @@ class SmartCategoriesGrid {
 
             <div class="scg-settings-section">
                 <h3><?php esc_html_e('Usage', 'smart-cat-grid'); ?></h3>
+                <p><?php esc_html_e('Block editor: add the "Categories Grid" block and configure it in the sidebar.', 'smart-cat-grid'); ?></p>
                 <p><?php esc_html_e('Shortcodes: [categories_grid type="top-level"], [categories_grid category_id="X"], [categories_grid auto="true" limit="200"]. Use exclude="X,Y", show_images="false", limit="N" as needed.', 'smart-cat-grid'); ?></p>
             </div>
         </div>
@@ -767,22 +847,21 @@ class SmartCategoriesGrid {
 
         wp_enqueue_media();
         wp_enqueue_style('wp-color-picker');
-        wp_enqueue_script('wp-color-picker');
-        wp_add_inline_script('wp-color-picker', 'jQuery(function($){ $(".scg-color-picker").wpColorPicker(); });');
 
         wp_enqueue_style('scg-admin',
             plugins_url('assets/admin.css', __FILE__), [],
-            $this->assetVersion('admin.css'));
+            $this->assetVersion('assets/admin.css'));
 
         wp_enqueue_script('scg-admin',
             plugins_url('assets/admin.js', __FILE__),
-            ['jquery', 'wp-i18n'],
-            $this->assetVersion('admin.js'),
+            ['jquery', 'wp-color-picker', 'wp-a11y'],
+            $this->assetVersion('assets/admin.js'),
             true);
 
         wp_localize_script('scg-admin', 'scg_admin', [
-            'nonce' => wp_create_nonce('scg-clear-cache'),
-            'i18n'  => [
+            'nonce'    => wp_create_nonce('scg-clear-cache'),
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'i18n'     => [
                 'clear_confirm'  => __('Are you sure?', 'smart-cat-grid'),
                 'clearing'       => __('Clearing...', 'smart-cat-grid'),
                 'clear_cache'    => __('Clear Cache', 'smart-cat-grid'),
@@ -792,10 +871,6 @@ class SmartCategoriesGrid {
                 'clear_failed'   => __('Failed to clear cache', 'smart-cat-grid'),
             ],
         ]);
-    }
-
-    private function assetVersion(string $file): string {
-        return $this->asset_versions[$file] ?: self::VERSION;
     }
 
     public function preCheckShortcode(): void {
@@ -809,7 +884,7 @@ class SmartCategoriesGrid {
         }
 
         if (!$found && is_a($post, 'WP_Post') && has_blocks($post->post_content)
-            && strpos($post->post_content, 'categories_grid') !== false) {
+            && (has_block(self::BLOCK_NAME, $post) || strpos($post->post_content, 'categories_grid') !== false)) {
             $found = true;
         }
 
@@ -845,7 +920,10 @@ class SmartCategoriesGrid {
         $block_widgets = get_option('widget_block');
         if (is_array($block_widgets)) {
             foreach ($block_widgets as $w) {
-                if (is_array($w) && isset($w['content']) && strpos($w['content'], 'categories_grid') !== false) return true;
+                if (is_array($w) && isset($w['content'])
+                    && (strpos($w['content'], 'categories_grid') !== false || strpos($w['content'], self::BLOCK_NAME) !== false)) {
+                    return true;
+                }
             }
         }
         return false;
@@ -859,15 +937,11 @@ class SmartCategoriesGrid {
         static $done = false;
         if ($done) return;
 
-        $use_min = !(defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) && $this->asset_versions['front.min.css'] !== '';
-        $file    = $use_min ? 'front.min.css' : 'front.css';
-
-        wp_enqueue_style(
-            'scg-front',
-            plugins_url('assets/' . $file, __FILE__),
-            [],
-            $this->assetVersion($file)
-        );
+        if (!wp_style_is(self::STYLE_HANDLE, 'registered')) {
+            $file = $this->frontStyleFile();
+            wp_register_style(self::STYLE_HANDLE, plugins_url($file, __FILE__), [], $this->assetVersion($file));
+        }
+        wp_enqueue_style(self::STYLE_HANDLE);
         $done = true;
     }
 
