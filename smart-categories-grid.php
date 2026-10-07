@@ -1,16 +1,19 @@
 <?php
 /*
 Plugin Name: Smart Categories Grid
+Plugin URI: https://github.com/gemuzkm/smart-categories-grid
 Description: Responsive category grid with caching, advanced settings, category exclusion, optional image display, and category limit
-Version: 2.1.0
+Version: 2.2.0
 Author: TM
-Author URI: your-site.com
+Author URI: https://github.com/gemuzkm
 Text Domain: smart-cat-grid
-Requires at least: 6.0
-Tested up to: 7.0
+Domain Path: /languages
+Requires at least: 6.3
+Tested up to: 7.1
 Requires PHP: 7.4
 License: GPL v2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Update URI: https://github.com/gemuzkm/smart-categories-grid
 */
 
 defined('ABSPATH') || exit;
@@ -18,18 +21,25 @@ defined('ABSPATH') || exit;
 register_activation_hook(__FILE__, ['SmartCategoriesGrid', 'onActivationStatic']);
 
 class SmartCategoriesGrid {
-    private const CACHE_PREFIX      = 'scg_cache_';
-    private const WIDGET_CACHE_KEY  = 'scg_widget_has_shortcode';
-    private const MIN_COLUMNS       = 2;
-    private const MAX_COLUMNS       = 6;
-    private const IMAGE_SIZE_NAME   = 'scg-thumb';
-    private const VERSION           = '2.1.0';
+    private const CACHE_PREFIX       = 'scg_cache_';
+    private const CACHE_GEN_OPTION   = 'scg_cache_gen';
+    private const WIDGET_CACHE_KEY   = 'scg_widget_has_shortcode';
+    private const MIN_COLUMNS        = 2;
+    private const MAX_COLUMNS        = 6;
+    private const IMAGE_SIZE_NAME    = 'scg-thumb';
+    private const IMAGE_SIZE_2X_NAME = 'scg-thumb-2x';
+    private const IMAGE_W            = 120;
+    private const IMAGE_H            = 96;
+    private const IMAGE_META_KEY     = 'logo';
+    private const VERSION            = '2.2.0';
 
-    private array $settings;
-    private array $image_cache    = [];  // perf #5: shared across all shortcode calls on the same page
-    private array $asset_versions = [];  // perf #4: computed once at init, not on every request
+    private array $settings = [];
+    private array $image_cache    = [];
+    private array $asset_versions = [];
+    private string $placeholder_url = '';
+    private ?int $cache_gen = null;
 
-    private static ?self $instance    = null;
+    private static ?self $instance      = null;
     private static bool $shortcode_used = false;
 
     public static function getInstance(): self {
@@ -41,56 +51,99 @@ class SmartCategoriesGrid {
 
     private function __construct() {
         add_action('plugins_loaded',    [$this, 'init']);
+        add_action('init',              [$this, 'loadTextdomain']);
         add_action('after_setup_theme', [$this, 'addImageSizes']);
     }
 
     public function init(): void {
         $this->loadSettings();
-        $this->computeAssetVersions(); // perf #4
+        $this->computeAssetVersions();
+        $this->computePlaceholderUrl();
         $this->registerHooks();
     }
 
-    // perf #4: compute file mtimes once at init instead of on every enqueue call
+    public function loadTextdomain(): void {
+        load_plugin_textdomain('smart-cat-grid', false, dirname(plugin_basename(__FILE__)) . '/languages');
+    }
+
     private function computeAssetVersions(): void {
         $base = plugin_dir_path(__FILE__) . 'assets/';
-        foreach (['front.css', 'admin.css', 'admin.js'] as $file) {
+        foreach (['front.css', 'front.min.css', 'admin.css', 'admin.js'] as $file) {
             $path = $base . $file;
-            $this->asset_versions[$file] = file_exists($path) ? (string) filemtime($path) : self::VERSION;
+            $this->asset_versions[$file] = file_exists($path) ? (string) filemtime($path) : '';
         }
     }
 
+    // Resolved once per request instead of a file_exists() per category.
+    private function computePlaceholderUrl(): void {
+        $url = '';
+        if (file_exists(plugin_dir_path(__FILE__) . 'assets/placeholder.png')) {
+            $url = plugins_url('assets/placeholder.png', __FILE__);
+        }
+        /**
+         * Filter the fallback image URL used when a category has no image.
+         *
+         * @param string $url Placeholder image URL ('' disables the fallback).
+         */
+        $this->placeholder_url = (string) apply_filters('scg_placeholder_image', $url);
+    }
+
     public function addImageSizes(): void {
-        add_image_size(self::IMAGE_SIZE_NAME, 120, 96, true);
+        add_image_size(self::IMAGE_SIZE_NAME,    self::IMAGE_W,     self::IMAGE_H,     true);
+        add_image_size(self::IMAGE_SIZE_2X_NAME, self::IMAGE_W * 2, self::IMAGE_H * 2, true);
         add_filter('image_size_names_choose', [$this, 'addImageSizeNames']);
     }
 
     public function addImageSizeNames(array $sizes): array {
         return array_merge($sizes, [
-            self::IMAGE_SIZE_NAME => __('Category Grid (120x96)', 'smart-cat-grid')
+            self::IMAGE_SIZE_NAME => __('Category Grid (120x96)', 'smart-cat-grid'),
         ]);
     }
 
     private function loadSettings(): void {
-        $this->settings = get_option('scg_settings', []);
+        $settings       = get_option('scg_settings', []);
+        $this->settings = is_array($settings) ? $settings : [];
     }
 
     private function registerHooks(): void {
         add_shortcode('categories_grid', [$this, 'renderGrid']);
-        add_action('admin_menu',            [$this, 'addAdminMenu']);
-        add_action('admin_init',            [$this, 'registerSettings']);
-        add_action('admin_enqueue_scripts', [$this, 'adminAssets']);
-        add_action('wp',                    [$this, 'preCheckShortcode']);
-        add_action('wp_enqueue_scripts',    [$this, 'frontendAssets']);
+        add_action('admin_menu',              [$this, 'addAdminMenu']);
+        add_action('admin_init',              [$this, 'registerSettings']);
+        add_action('admin_enqueue_scripts',   [$this, 'adminAssets']);
+        add_action('wp',                      [$this, 'preCheckShortcode']);
+        add_action('wp_enqueue_scripts',      [$this, 'frontendAssets']);
         add_action('wp_ajax_scg_clear_cache', [$this, 'ajaxClearCache']);
 
+        // Category structure changes.
         add_action('created_category', [$this, 'clearAllCache']);
         add_action('edited_category',  [$this, 'clearAllCache']);
         add_action('delete_category',  [$this, 'clearAllCache']);
+
+        // Category image (term meta "logo") changes without saving the term itself.
+        add_action('added_term_meta',   [$this, 'onTermMetaChange'], 10, 3);
+        add_action('updated_term_meta', [$this, 'onTermMetaChange'], 10, 3);
+        add_action('deleted_term_meta', [$this, 'onTermMetaChange'], 10, 3);
+
+        // Widget content changed: re-scan for the shortcode on next request.
+        add_action('update_option_widget_text',  [$this, 'clearWidgetCache']);
+        add_action('update_option_widget_block', [$this, 'clearWidgetCache']);
     }
 
     public static function onActivationStatic(): void {
-        add_image_size(self::IMAGE_SIZE_NAME, 120, 96, true);
+        add_image_size(self::IMAGE_SIZE_NAME,    self::IMAGE_W,     self::IMAGE_H,     true);
+        add_image_size(self::IMAGE_SIZE_2X_NAME, self::IMAGE_W * 2, self::IMAGE_H * 2, true);
         add_option('scg_show_regenerate_notice', true);
+        add_option(self::CACHE_GEN_OPTION, 1, '', true);
+        delete_transient(self::WIDGET_CACHE_KEY);
+    }
+
+    public function onTermMetaChange($meta_id, $object_id, $meta_key): void {
+        if ($meta_key === self::IMAGE_META_KEY) {
+            $this->clearAllCache();
+        }
+    }
+
+    public function clearWidgetCache(): void {
         delete_transient(self::WIDGET_CACHE_KEY);
     }
 
@@ -154,7 +207,7 @@ class SmartCategoriesGrid {
         ];
 
         if ($force_update) {
-            return $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
+            return $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings)['html'];
         }
 
         return $this->getCachedGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
@@ -210,11 +263,7 @@ class SmartCategoriesGrid {
     }
 
     /**
-     * perf #6: Pre-compute ancestry depth for each category in a single pass
-     * to avoid O(N log N) get_ancestors() calls inside usort comparator.
-     *
      * @param WP_Term[] $cats
-     * @return WP_Term
      */
     private function deepestCategory(array $cats): WP_Term {
         $depths = [];
@@ -225,6 +274,25 @@ class SmartCategoriesGrid {
             return $depths[$b->term_id] - $depths[$a->term_id];
         });
         return $cats[0];
+    }
+
+    /**
+     * Locale-aware, case-insensitive comparison. strcasecmp() only folds ASCII,
+     * so Cyrillic/accented names would sort by byte value (all uppercase first).
+     */
+    private function compareNames(string $a, string $b): int {
+        static $collator = null;
+        if ($collator === null) {
+            $collator = class_exists('Collator') ? new Collator(get_locale()) : false;
+        }
+        if ($collator instanceof Collator) {
+            $result = $collator->compare($a, $b);
+            if ($result !== false) return (int) $result;
+        }
+        if (function_exists('mb_strtolower')) {
+            return strcmp(mb_strtolower($a, 'UTF-8'), mb_strtolower($b, 'UTF-8'));
+        }
+        return strcasecmp($a, $b);
     }
 
     private function getShortcodeSetting(string $key, array $atts, $default, string $type = 'string') {
@@ -246,9 +314,20 @@ class SmartCategoriesGrid {
         $global = !empty($this->settings['exclude_categories'])
             ? array_map('absint', array_filter(explode(',', $this->settings['exclude_categories'])))
             : [];
-        $merged = array_unique(array_merge($local, $global));
+        $merged = array_unique(array_filter(array_merge($local, $global)));
         sort($merged);
-        return $merged;
+        return array_values($merged);
+    }
+
+    /**
+     * Cache generation number. Bumping it invalidates every cached grid in O(1)
+     * and works identically with the options table and persistent object caches.
+     */
+    private function getCacheGeneration(): int {
+        if ($this->cache_gen === null) {
+            $this->cache_gen = max(1, (int) get_option(self::CACHE_GEN_OPTION, 1));
+        }
+        return $this->cache_gen;
     }
 
     private function getCachedGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): string {
@@ -263,21 +342,34 @@ class SmartCategoriesGrid {
             $grid_settings['hover_effect'] ? '1' : '0',
             $grid_settings['button_color'],
             self::VERSION,
+            $this->getCacheGeneration(),
         ];
         $cacheKey = self::CACHE_PREFIX . md5(implode('|', $key_parts));
 
-        $output = get_transient($cacheKey);
-        if (false === $output) {
-            $output    = $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
-            $cacheTime = (int) ($this->settings['cache_time'] ?? DAY_IN_SECONDS);
-            if ($cacheTime > 0) {
-                set_transient($cacheKey, $output, $cacheTime);
+        $cached = get_transient($cacheKey);
+        if (is_array($cached) && isset($cached['html'])) {
+            // Keep WordPress' per-page media counter accurate so lazy-loading
+            // decisions for images rendered after this grid stay correct.
+            if (!empty($cached['media']) && function_exists('wp_increase_content_media_count')) {
+                wp_increase_content_media_count((int) $cached['media']);
             }
+            return (string) $cached['html'];
         }
-        return $output;
+
+        $result    = $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
+        $cacheTime = (int) ($this->settings['cache_time'] ?? DAY_IN_SECONDS);
+        if ($cacheTime > 0) {
+            set_transient($cacheKey, $result, $cacheTime);
+        }
+        return $result['html'];
     }
 
-    private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): string {
+    /**
+     * @return array{html:string, media:int}
+     */
+    private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): array {
+        $display_images = ($grid_settings['style'] === 'text') ? false : $show_images;
+
         $args = [
             'taxonomy'               => 'category',
             'parent'                 => $parent,
@@ -285,19 +377,20 @@ class SmartCategoriesGrid {
             'orderby'                => 'name',
             'order'                  => 'ASC',
             'hierarchical'           => false,
-            'update_term_meta_cache' => false,
+            // Prime term meta in ONE query only when we will actually read it.
+            'update_term_meta_cache' => $display_images,
         ];
         if (!empty($exclude_ids)) {
             $args['exclude'] = $exclude_ids;
         }
 
         $categories = get_terms($args);
-        if (empty($categories) || is_wp_error($categories)) return '';
+        if (empty($categories) || is_wp_error($categories)) {
+            return ['html' => '', 'media' => 0];
+        }
 
-        // PHP-level sort: DB ORDER BY may be ignored when 'exclude' triggers
-        // a subquery in MySQL 5.7+ / MariaDB 10.3+.
         usort($categories, function (WP_Term $a, WP_Term $b): int {
-            return strcasecmp($a->name, $b->name);
+            return $this->compareNames($a->name, $b->name);
         });
 
         $total = count($categories);
@@ -305,48 +398,50 @@ class SmartCategoriesGrid {
             $categories = array_slice($categories, 0, $limit);
         }
 
-        $display_images = ($grid_settings['style'] === 'text') ? false : $show_images;
-        $is_card_style  = ($grid_settings['style'] === 'card');
+        // Parent term is needed for hierarchical permalinks and the "View All" link.
+        if ($parent > 0 && function_exists('_prime_term_caches')) {
+            _prime_term_caches([$parent]);
+        }
 
-        ob_start();
+        // Collect attachment IDs and prime their post + meta caches in one query
+        // instead of one query per image inside wp_get_attachment_image_url().
+        if ($display_images) {
+            $attachment_ids = [];
+            foreach ($categories as $cat) {
+                $image_id = get_term_meta($cat->term_id, self::IMAGE_META_KEY, true);
+                if ($image_id && is_numeric($image_id)) {
+                    $attachment_ids[] = (int) $image_id;
+                }
+            }
+            if (!empty($attachment_ids) && function_exists('_prime_post_caches')) {
+                _prime_post_caches(array_unique($attachment_ids), false, true);
+            }
+        }
+
         $hover_class  = $grid_settings['hover_effect'] ? ' has-hover' : '';
         $style_class  = ' scg-style-' . sanitize_html_class($grid_settings['style']);
         $columns      = absint($grid_settings['columns']);
         $image_radius = absint($grid_settings['image_radius']);
         $button_color = sanitize_hex_color($grid_settings['button_color']) ?: '#b93434';
+        $media_count  = 0;
+
+        ob_start();
         ?>
         <div class="scg-grid<?php echo esc_attr($hover_class . $style_class); ?>"
              style="--scg-columns: <?php echo esc_attr($columns); ?>;
                     --scg-image-radius: <?php echo esc_attr($image_radius); ?>px;
                     --scg-button-color: <?php echo esc_attr($button_color); ?>;">
-            <?php
-            $index = 0;
-            foreach ($categories as $cat) :
+            <?php foreach ($categories as $cat) :
                 $term_link = get_term_link($cat);
                 if (is_wp_error($term_link)) continue;
-                $image = $display_images ? $this->getCategoryImage($cat->term_id) : '';
-
-                // perf #1 (LCP): first visible image must NOT be lazy-loaded
-                $is_first   = ($index === 0);
-                $loading    = $is_first ? 'eager' : 'lazy';
-                $fetchprio  = $is_first ? ' fetchpriority="high"' : '';
-
-                // perf #2 (CLS): card style renders images at 100%x140px via CSS
-                $img_w = $is_card_style ? '' : ' width="120"';
-                $img_h = $is_card_style ? '' : ' height="96"';
-                $index++;
+                $image = $display_images ? $this->getCategoryImage($cat->term_id) : null;
             ?>
                 <div class="scg-col">
                     <div class="scg-card<?php echo esc_attr($hover_class); ?>">
-                        <?php if ($display_images && $image) : ?>
-                            <div class="scg-image">
-                                <img src="<?php echo esc_url($image); ?>"
-                                     alt="<?php echo esc_attr($cat->name); ?>"
-                                     <?php echo $img_w . $img_h . $fetchprio; ?>
-                                     loading="<?php echo esc_attr($loading); ?>"
-                                     decoding="async">
-                            </div>
-                        <?php endif; ?>
+                        <?php if ($image) :
+                            $media_count++;
+                            echo '<div class="scg-image">' . $this->buildImgTag($image, $cat->name) . '</div>';
+                        endif; ?>
                         <div class="scg-title">
                             <a href="<?php echo esc_url($term_link); ?>"><?php echo esc_html($cat->name); ?></a>
                         </div>
@@ -356,7 +451,7 @@ class SmartCategoriesGrid {
             <?php if ($limit > 0 && $total > $limit) :
                 $view_all_url = '';
                 if ($parent > 0) {
-                    $u = get_term_link($parent);
+                    $u = get_term_link($parent, 'category');
                     if (!is_wp_error($u)) $view_all_url = $u;
                 } else {
                     $view_all_url = $this->settings['view_all_url'] ?? '';
@@ -371,30 +466,82 @@ class SmartCategoriesGrid {
             endif; ?>
         </div>
         <?php
-        return ob_get_clean();
+        return ['html' => (string) ob_get_clean(), 'media' => $media_count];
     }
 
-    private function getCategoryImage(int $term_id): string {
-        if (isset($this->image_cache[$term_id])) {
+    /**
+     * Build an <img> tag, letting core decide loading / fetchpriority / decoding
+     * based on its per-page media counter (wp_get_loading_optimization_attributes).
+     *
+     * @param array{src:string, srcset:string} $image
+     */
+    private function buildImgTag(array $image, string $alt): string {
+        $attr = [
+            'src'    => $image['src'],
+            'alt'    => $alt,
+            'width'  => (string) self::IMAGE_W,
+            'height' => (string) self::IMAGE_H,
+        ];
+        if (!empty($image['srcset'])) {
+            $attr['srcset'] = $image['srcset'];
+        }
+
+        if (function_exists('wp_get_loading_optimization_attributes')) {
+            $attr = array_merge($attr, wp_get_loading_optimization_attributes('img', $attr, 'scg_grid'));
+        } else {
+            $attr['loading']  = 'lazy';
+            $attr['decoding'] = 'async';
+        }
+        if (empty($attr['decoding'])) {
+            $attr['decoding'] = 'async';
+        }
+
+        $html = '<img';
+        foreach ($attr as $name => $value) {
+            if ($value === '' || $value === null || $value === false) continue;
+            $escaped = ($name === 'src') ? esc_url($value) : esc_attr($value);
+            $html   .= ' ' . $name . '="' . $escaped . '"';
+        }
+        return $html . '>';
+    }
+
+    /**
+     * @return array{src:string, srcset:string}|null
+     */
+    private function getCategoryImage(int $term_id): ?array {
+        if (array_key_exists($term_id, $this->image_cache)) {
             return $this->image_cache[$term_id];
         }
 
-        $image_id = get_term_meta($term_id, 'logo', true);
+        $result   = null;
+        $image_id = get_term_meta($term_id, self::IMAGE_META_KEY, true);
+
         if ($image_id && is_numeric($image_id)) {
-            $url = wp_get_attachment_image_url((int) $image_id, self::IMAGE_SIZE_NAME);
-            if ($url) {
-                return $this->image_cache[$term_id] = $url;
+            $image_id = (int) $image_id;
+            $src      = wp_get_attachment_image_url($image_id, self::IMAGE_SIZE_NAME);
+            if ($src) {
+                $srcset = '';
+                $src2x  = wp_get_attachment_image_src($image_id, self::IMAGE_SIZE_2X_NAME);
+                // Only use the 2x candidate when a real cropped intermediate exists,
+                // otherwise WordPress falls back to the full-size original.
+                if (is_array($src2x) && !empty($src2x[3]) && (int) $src2x[1] === self::IMAGE_W * 2) {
+                    $srcset = esc_url($src) . ' 1x, ' . esc_url($src2x[0]) . ' 2x';
+                }
+                $result = ['src' => $src, 'srcset' => $srcset];
             }
         }
 
-        $default = $this->settings['default_image'] ?? '';
-        if (!$default) {
-            $placeholder = plugin_dir_path(__FILE__) . 'assets/placeholder.png';
-            if (file_exists($placeholder)) {
-                $default = plugins_url('assets/placeholder.png', __FILE__);
+        if ($result === null) {
+            $default = $this->settings['default_image'] ?? '';
+            if (!$default) {
+                $default = $this->placeholder_url;
+            }
+            if ($default) {
+                $result = ['src' => $default, 'srcset' => ''];
             }
         }
-        return $this->image_cache[$term_id] = $default;
+
+        return $this->image_cache[$term_id] = $result;
     }
 
     public function addAdminMenu(): void {
@@ -428,7 +575,7 @@ class SmartCategoriesGrid {
 
             <div class="scg-settings-section">
                 <h3><?php esc_html_e('Image Size Information', 'smart-cat-grid'); ?></h3>
-                <p><?php esc_html_e('This plugin uses a custom image size of 120x96 pixels. New uploads are resized automatically.', 'smart-cat-grid'); ?></p>
+                <p><?php esc_html_e('This plugin registers two image sizes: 120x96 (1x) and 240x192 (2x for Retina displays). New uploads are resized automatically.', 'smart-cat-grid'); ?></p>
                 <p><?php esc_html_e('For existing images, regenerate thumbnails using a plugin like "Regenerate Thumbnails".', 'smart-cat-grid'); ?></p>
             </div>
 
@@ -440,16 +587,20 @@ class SmartCategoriesGrid {
     <?php }
 
     public function registerSettings(): void {
-        register_setting('scg_settings_group', 'scg_settings', [$this, 'validateSettings']);
+        register_setting('scg_settings_group', 'scg_settings', [
+            'type'              => 'array',
+            'sanitize_callback' => [$this, 'validateSettings'],
+            'default'           => [],
+        ]);
 
-        add_settings_section('scg_general_section',  __('General Settings', 'smart-cat-grid'),  null, 'scg-settings');
+        add_settings_section('scg_general_section',  __('General Settings', 'smart-cat-grid'),  '__return_null', 'scg-settings');
         add_settings_field('default_category',   __('Default Category', 'smart-cat-grid'),       [$this, 'categorySelectField'],    'scg-settings', 'scg_general_section');
         add_settings_field('exclude_categories', __('Exclude Categories', 'smart-cat-grid'),     [$this, 'excludeCategoriesField'], 'scg-settings', 'scg_general_section');
         add_settings_field('cache_time',         __('Cache Duration', 'smart-cat-grid'),         [$this, 'cacheTimeField'],         'scg-settings', 'scg_general_section');
         add_settings_field('default_limit',      __('Default Category Limit', 'smart-cat-grid'), [$this, 'defaultLimitField'],      'scg-settings', 'scg_general_section');
         add_settings_field('view_all_url',       __('View All URL', 'smart-cat-grid'),           [$this, 'viewAllUrlField'],        'scg-settings', 'scg_general_section');
 
-        add_settings_section('scg_display_section', __('Display Settings', 'smart-cat-grid'), null, 'scg-settings');
+        add_settings_section('scg_display_section', __('Display Settings', 'smart-cat-grid'), '__return_null', 'scg-settings');
         add_settings_field('columns',             __('Default Columns', 'smart-cat-grid'),        [$this, 'columnsField'],           'scg-settings', 'scg_display_section');
         add_settings_field('image_radius',        __('Image Border Radius', 'smart-cat-grid'),    [$this, 'imageRadiusField'],       'scg-settings', 'scg_display_section');
         add_settings_field('hover_effect',        __('Hover Effect', 'smart-cat-grid'),           [$this, 'hoverEffectField'],       'scg-settings', 'scg_display_section');
@@ -466,6 +617,7 @@ class SmartCategoriesGrid {
             'name'              => 'scg_settings[default_category]',
             'selected'          => (int) ($this->settings['default_category'] ?? 0),
             'hierarchical'      => true,
+            'hide_empty'        => false,
         ]);
     }
 
@@ -507,10 +659,9 @@ class SmartCategoriesGrid {
     }
 
     public function hoverEffectField(): void {
-        $checked = !empty($this->settings['hover_effect']) ? 'checked' : '';
         printf(
-            '<label><input type="checkbox" name="scg_settings[hover_effect]" value="1" %s> %s</label>',
-            $checked,
+            '<label><input type="checkbox" name="scg_settings[hover_effect]" value="1"%s> %s</label>',
+            checked(!empty($this->settings['hover_effect']), true, false),
             esc_html__('Enable hover effects', 'smart-cat-grid')
         );
     }
@@ -522,10 +673,9 @@ class SmartCategoriesGrid {
     }
 
     public function defaultShowImagesField(): void {
-        $checked = !empty($this->settings['default_show_images']) ? 'checked' : '';
         printf(
-            '<label><input type="checkbox" name="scg_settings[default_show_images]" value="1" %s> %s</label>',
-            $checked,
+            '<label><input type="checkbox" name="scg_settings[default_show_images]" value="1"%s> %s</label>',
+            checked(!empty($this->settings['default_show_images']), true, false),
             esc_html__('Show images by default', 'smart-cat-grid')
         );
         echo '<p class="description">' . esc_html__('If checked, images will be shown unless overridden by the shortcode.', 'smart-cat-grid') . '</p>';
@@ -573,7 +723,7 @@ class SmartCategoriesGrid {
         $output['default_category'] = absint($input['default_category'] ?? 0);
 
         $exclude = trim(sanitize_text_field($input['exclude_categories'] ?? ''));
-        $ids     = $exclude ? array_unique(array_map('absint', array_filter(explode(',', $exclude), 'is_numeric'))) : [];
+        $ids     = $exclude ? array_unique(array_filter(array_map('absint', explode(',', $exclude)))) : [];
         $output['exclude_categories'] = implode(',', $ids);
 
         $output['cache_time'] = absint($input['cache_time'] ?? DAY_IN_SECONDS);
@@ -594,24 +744,22 @@ class SmartCategoriesGrid {
         $output['grid_style'] = in_array($style, $valid_styles, true) ? $style : 'classic';
 
         $this->settings = $output;
-        wp_cache_delete('scg_settings', 'options');
-        wp_cache_delete('alloptions', 'options');
-        delete_transient(self::WIDGET_CACHE_KEY);
+        $this->clearWidgetCache();
         $this->clearAllCache();
 
         return $output;
     }
 
+    /**
+     * Invalidate all cached grids by bumping the cache generation.
+     * No LIKE-DELETE on wp_options, and it works with Redis/Memcached where
+     * transients never touch the database.
+     */
     public function clearAllCache(): void {
-        global $wpdb;
-        $pattern   = $wpdb->esc_like('_transient_' . self::CACHE_PREFIX) . '%';
-        $pattern_t = $wpdb->esc_like('_transient_timeout_' . self::CACHE_PREFIX) . '%';
-        $wpdb->query($wpdb->prepare(
-            "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
-            $pattern,
-            $pattern_t
-        ));
-        wp_cache_delete('alloptions', 'options');
+        $gen = $this->getCacheGeneration() + 1;
+        update_option(self::CACHE_GEN_OPTION, $gen, true);
+        $this->cache_gen   = $gen;
+        $this->image_cache = [];
     }
 
     public function adminAssets(string $hook): void {
@@ -624,12 +772,12 @@ class SmartCategoriesGrid {
 
         wp_enqueue_style('scg-admin',
             plugins_url('assets/admin.css', __FILE__), [],
-            $this->asset_versions['admin.css']);
+            $this->assetVersion('admin.css'));
 
         wp_enqueue_script('scg-admin',
             plugins_url('assets/admin.js', __FILE__),
             ['jquery', 'wp-i18n'],
-            $this->asset_versions['admin.js'],
+            $this->assetVersion('admin.js'),
             true);
 
         wp_localize_script('scg-admin', 'scg_admin', [
@@ -644,6 +792,10 @@ class SmartCategoriesGrid {
                 'clear_failed'   => __('Failed to clear cache', 'smart-cat-grid'),
             ],
         ]);
+    }
+
+    private function assetVersion(string $file): string {
+        return $this->asset_versions[$file] ?: self::VERSION;
     }
 
     public function preCheckShortcode(): void {
@@ -687,13 +839,13 @@ class SmartCategoriesGrid {
         $widget_text = get_option('widget_text');
         if (is_array($widget_text)) {
             foreach ($widget_text as $w) {
-                if (isset($w['text']) && has_shortcode($w['text'], 'categories_grid')) return true;
+                if (is_array($w) && isset($w['text']) && has_shortcode($w['text'], 'categories_grid')) return true;
             }
         }
         $block_widgets = get_option('widget_block');
         if (is_array($block_widgets)) {
             foreach ($block_widgets as $w) {
-                if (isset($w['content']) && strpos($w['content'], 'categories_grid') !== false) return true;
+                if (is_array($w) && isset($w['content']) && strpos($w['content'], 'categories_grid') !== false) return true;
             }
         }
         return false;
@@ -707,11 +859,14 @@ class SmartCategoriesGrid {
         static $done = false;
         if ($done) return;
 
+        $use_min = !(defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) && $this->asset_versions['front.min.css'] !== '';
+        $file    = $use_min ? 'front.min.css' : 'front.css';
+
         wp_enqueue_style(
             'scg-front',
-            plugins_url('assets/front.css', __FILE__),
+            plugins_url('assets/' . $file, __FILE__),
             [],
-            $this->asset_versions['front.css']
+            $this->assetVersion($file)
         );
         $done = true;
     }
@@ -722,6 +877,7 @@ class SmartCategoriesGrid {
         }
         check_ajax_referer('scg-clear-cache', 'nonce');
         $this->clearAllCache();
+        $this->clearWidgetCache();
         wp_send_json_success(['message' => __('Cache cleared successfully!', 'smart-cat-grid')]);
     }
 }
