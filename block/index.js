@@ -76,6 +76,12 @@
 				min: 0,
 				value: a.limit,
 				onChange: function ( v ) { set( { limit: String( v ).replace( /[^0-9]/g, '' ) } ); }
+			} ),
+			el( c.ToggleControl, {
+				label: __( 'Show "View All" button', 'smart-cat-grid' ),
+				help: __( 'The button appears only when the limit cuts the list. Turn off to hide it anyway.', 'smart-cat-grid' ),
+				checked: a.showViewAll !== false,
+				onChange: function ( v ) { set( { showViewAll: !! v } ); }
 			} )
 		);
 
