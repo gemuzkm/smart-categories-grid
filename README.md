@@ -28,7 +28,7 @@
   - **Auto mode**: Automatically detect current category
   - **Direct children only**: Shows only 1 level of subcategories (no deep nesting)
   - Category exclusion (global and per-block/shortcode)
-  - Category limit with "View All" button
+  - Category limit with "View All" button (can be hidden per block/shortcode)
   - Per-block/shortcode settings override all defaults
 - **🚀 Performance Optimized**:
   - Term meta and attachment caches primed in a single query each (no N+1)
@@ -78,6 +78,7 @@ For more control, use attributes:
 | Exclude category IDs | `exclude` | string | - | Comma-separated IDs, e.g. `"10,20,30"` |
 | Images | `show_images` | boolean | Settings default | `true` / `false` |
 | Limit | `limit` | integer | Settings default | Max categories (0 = no limit) |
+| Show "View All" button | `show_view_all` | boolean | `true` | `false` hides the "View All" button even when `limit` cuts the list |
 | Columns | `columns` | integer | Settings default | 2–6 |
 | Style | `style` | string | Settings default | `classic`, `modern`, `minimal`, `card`, `text` |
 | Hover effect | `hover_effect` | boolean | Settings default | `true` / `false` |
@@ -90,11 +91,16 @@ For more control, use attributes:
 ```php
 [categories_grid auto="true"]
 [categories_grid category_id="5" limit="10"]
+[categories_grid category_id="5" limit="10" show_view_all="false"]
 [categories_grid auto="true" style="modern" columns="4" show_images="true"]
 [categories_grid type="top-level" limit="0"]
 [categories_grid category_id="5" exclude="10,20" show_images="false"]
 [categories_grid auto="true" style="card" columns="3" limit="6" hover_effect="true" button_color="#ff6b6b"]
 ```
+
+### "View All" button
+
+The button is rendered only when **both** conditions are met: `limit > 0` **and** the parent has more categories than `limit`. For subcategories it links to the parent category archive; for `type="top-level"` it uses the **View All URL** setting (empty = no button). To keep the limit but hide the button, use `show_view_all="false"` (block: *Show "View All" button* toggle).
 
 ### Auto Mode Details
 
@@ -272,6 +278,10 @@ Translation-ready; text domain `smart-cat-grid`. PHP translations are loaded fro
 3. Push a tag `vX.Y.Z` — the Release workflow lints the code, verifies the versions match, builds the ZIP and publishes a GitHub Release with these notes
 
 ## 📝 Changelog
+
+### Version 2.3.1
+- **New**: shortcode attribute `show_view_all` / block toggle *Show "View All" button* (`showViewAll`, default `true`) — hides the "View All" button while keeping `limit`; the flag is part of the cache key
+- **Docs**: README section on when the "View All" button is rendered
 
 ### Version 2.3.0
 - **New**: Gutenberg block `smart-cat-grid/categories-grid` with live `ServerSideRender` preview, hierarchical parent-category picker and all display overrides in the sidebar; supports wide/full alignment and margin controls
