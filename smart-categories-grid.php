@@ -3,7 +3,7 @@
 Plugin Name: Smart Categories Grid
 Plugin URI: https://github.com/gemuzkm/smart-categories-grid
 Description: Responsive category grid with caching, advanced settings, category exclusion, optional image display, and category limit
-Version: 2.3.0
+Version: 2.3.1
 Author: TM
 Author URI: https://github.com/gemuzkm
 Text Domain: smart-cat-grid
@@ -34,7 +34,7 @@ class SmartCategoriesGrid {
     private const STYLE_HANDLE       = 'scg-front';
     private const BLOCK_SCRIPT       = 'scg-block-editor';
     private const BLOCK_NAME         = 'smart-cat-grid/categories-grid';
-    private const VERSION            = '2.3.0';
+    private const VERSION            = '2.3.1';
 
     private array $settings = [];
     private array $image_cache    = [];
@@ -131,6 +131,7 @@ class SmartCategoriesGrid {
             'hover_effect' => (string) ($attributes['hoverEffect'] ?? ''),
             'image_radius' => (string) ($attributes['imageRadius'] ?? ''),
             'button_color' => (string) ($attributes['buttonColor'] ?? ''),
+            'show_view_all' => (isset($attributes['showViewAll']) && $attributes['showViewAll'] === false) ? 'false' : 'true',
         ];
 
         $is_editor_preview = defined('REST_REQUEST') && REST_REQUEST && is_user_logged_in();
@@ -240,6 +241,7 @@ class SmartCategoriesGrid {
             'hover_effect' => '',
             'image_radius' => '',
             'button_color' => '',
+            'show_view_all' => '',
             'force_update' => 'false',
         ], is_array($atts) ? $atts : []);
 
@@ -268,6 +270,8 @@ class SmartCategoriesGrid {
         $hover_effect = $this->getShortcodeSetting('hover_effect', $atts, !empty($this->settings['hover_effect']), 'bool');
         $image_radius = $this->getShortcodeSetting('image_radius', $atts, (int) ($this->settings['image_radius'] ?? 3), 'int');
         $button_color = $this->getShortcodeSetting('button_color', $atts, $this->settings['button_color'] ?? '#b93434', 'color');
+        // "View All" button is shown by default; show_view_all="false" hides it even when the limit cuts the list.
+        $show_view_all = $this->getShortcodeSetting('show_view_all', $atts, true, 'bool');
 
         $force_update = filter_var($atts['force_update'], FILTER_VALIDATE_BOOLEAN);
         $columns      = max(self::MIN_COLUMNS, min(self::MAX_COLUMNS, $columns));
@@ -283,6 +287,7 @@ class SmartCategoriesGrid {
             'hover_effect' => $hover_effect,
             'style'        => $style,
             'button_color' => $button_color,
+            'show_view_all' => $show_view_all,
         ];
 
         if ($force_update) {
@@ -420,6 +425,7 @@ class SmartCategoriesGrid {
             $grid_settings['image_radius'],
             $grid_settings['hover_effect'] ? '1' : '0',
             $grid_settings['button_color'],
+            !empty($grid_settings['show_view_all']) ? '1' : '0',
             self::VERSION,
             $this->getCacheGeneration(),
         ];
@@ -527,7 +533,7 @@ class SmartCategoriesGrid {
                     </div>
                 </div>
             <?php endforeach; ?>
-            <?php if ($limit > 0 && $total > $limit) :
+            <?php if ($limit > 0 && $total > $limit && !empty($grid_settings['show_view_all'])) :
                 $view_all_url = '';
                 if ($parent > 0) {
                     $u = get_term_link($parent, 'category');
