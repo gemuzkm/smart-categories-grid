@@ -1,356 +1,85 @@
 # Smart Categories Grid
 
-**Smart Categories Grid** is a WordPress plugin that displays categories in a responsive grid layout with advanced caching, customizable settings, category exclusion, optional image display, and category limit capabilities. Available as a **Gutenberg block** and a **shortcode**. Optimized for performance and designed for sites with a large number of categories.
+Responsive category navigation for WordPress, available as a dynamic block and the `[categories_grid]` shortcode. Both interfaces share a server-side renderer and cache.
 
-[![WordPress](https://img.shields.io/badge/WordPress-6.3%2B-blue.svg)](https://wordpress.org/)
-[![Tested up to](https://img.shields.io/badge/Tested%20up%20to-7.1-brightgreen.svg)](https://wordpress.org/)
-[![PHP](https://img.shields.io/badge/PHP-7.4%2B-purple.svg)](https://php.net/)
-[![License](https://img.shields.io/badge/License-GPL%20v2-green.svg)](https://www.gnu.org/licenses/gpl-2.0.html)
+## Requirements
 
-## ✨ Features
+WordPress 6.3+, PHP 7.4+. Compatibility metadata remains at WordPress 7.1; no new platform certification is claimed. The optional `intl` extension enables locale-aware sorting.
 
-- **🧩 Block + Shortcode**: native "Categories Grid" block with live preview and sidebar controls, plus the classic `[categories_grid]` shortcode — both share one render path and one cache
-- **📱 Responsive Grid**: Automatically adjusts to different screen sizes (mobile, tablet, desktop)
-- **⚡ Advanced Caching**: Generation-based cache invalidation that works with the options table **and** persistent object caches (Redis, Memcached)
-- **🎯 Auto Category Detection**: Automatically detect current category and display its direct subcategories
-- **🎨 Customizable Display**:
-  - Adjustable columns (2-6 columns)
-  - Customizable image border radius
-  - Optional hover effects
-  - Custom button colors
-  - 5 beautiful styles: Classic, Modern, Minimal, Card, Text Only
-- **🖼️ Image Support**:
-  - Custom image sizes: 120x96 (1x) and 240x192 (2x, Retina) served via `srcset`
-  - Default image fallback (`assets/placeholder.png`, overridable via filter)
-  - Native lazy loading: the first row is loaded eagerly, every following image has `loading="lazy"`
-- **🔧 Flexible Configuration**:
-  - Display subcategories or top-level categories
-  - **Auto mode**: Automatically detect current category
-  - **Direct children only**: Shows only 1 level of subcategories (no deep nesting)
-  - Category exclusion (global and per-block/shortcode)
-  - Category limit with "View All" button (can be hidden per block/shortcode)
-  - Per-block/shortcode settings override all defaults
-- **🚀 Performance Optimized**:
-  - Term meta and attachment caches primed in a single query each (no N+1)
-  - Instance-level image cache shared across multiple grids on the same page
-  - Asset file versions computed once at init (no repeated disk I/O)
-  - Minified frontend CSS (`front.min.css`, rebuilt automatically by CI; falls back to `front.css` when `SCRIPT_DEBUG` is on)
-  - Conditional asset loading (block styles are loaded by WordPress only when the block is present)
-  - Stylesheet is printed right before the grid when the page `<head>` has already been sent — no flash of unstyled grid, no layout shift
-  - Widget shortcode detection cached via transient and invalidated when widgets change
-  - Locale-aware category sorting (ICU `Collator` when available)
+## Features
 
-## 📦 Installation
+- Five styles: Classic, Modern, Minimal, Card and Text Only.
+- Responsive columns, category selection, automatic context detection and exclusions.
+- Optional category images, default images and high-density thumbnail candidates.
+- Optional category limits, View All navigation and empty-archive filtering.
+- Transient-based HTML caching with unique generation tokens.
+- No plugin JavaScript enqueued for visitor-facing grids.
 
-### Manual Installation
+## Installation and usage
 
-1. Download the latest `smart-categories-grid-X.Y.Z.zip` from [Releases](https://github.com/gemuzkm/smart-categories-grid/releases)
-2. Go to **Plugins → Add New → Upload Plugin**, choose the ZIP and click **Install Now**
-3. Activate the plugin
-4. Navigate to **Settings → Categories Grid** to configure defaults
+Install the release ZIP through Plugins → Add New → Upload Plugin. Configure Settings → Categories Grid, then insert the Categories Grid block or use:
 
-## 🚀 Quick Start
-
-### Block editor
-
-Insert the **Categories Grid** block (category *Widgets*, or type `/categories`). Pick the source in the sidebar — auto-detect, subcategories of a chosen parent, or top-level categories — and optionally override style, columns, images, hover effect, image radius and button color. Everything left on *Default (from settings)* inherits the values from **Settings → Categories Grid**.
-
-### Shortcode
-
-```
-[categories_grid]
+```text
+[categories_grid category_id="5" limit="12" show_images="true"]
+[categories_grid type="top-level" hide_empty="true"]
+[categories_grid auto="true" columns="4" style="modern"]
 ```
 
-For more control, use attributes:
+Attributes: `category_id`, `type` (`subcategories` or `top-level`), `auto`, `exclude`, `hide_empty`, `limit`, `show_view_all`, `show_images`, `columns`, `style`, `hover_effect`, `image_radius`, `button_color`, `force_update`.
 
-```
-[categories_grid category_id="5" limit="10" show_images="true"]
-```
+Columns are clamped to 2–6, radius to 0–50 px. A zero limit means unlimited. `hide_empty` defaults to false and retains parents with populated descendants. `show_view_all` defaults to true; its button requires a truncated list and links to the parent archive or the saved top-level View All URL. `force_update` bypasses cache for one render without replacing the cached entry.
 
-## 📖 Usage
+Blank block controls inherit saved settings. Auto mode uses archive context or the assigned post category; the editor displays a placeholder. Only direct subcategories are displayed.
 
-### Block attributes vs shortcode attributes
+Category images use an attachment ID stored in term meta `logo`. Fallback order: category attachment, saved default attachment, default URL, bundled placeholder. Save settings once to resolve an existing default URL to a local attachment. External URLs remain supported. Regenerate `scg-thumb` (120×96) and `scg-thumb-2x` (240×192) for existing images.
 
-| Block control | Shortcode attribute | Type | Default | Description |
-|---------------|---------------------|------|---------|-------------|
-| Auto-detect current category | `auto` | boolean | `false` | Show direct subcategories of the category being viewed |
-| Display → Subcategories / Top-level | `type` | string | `subcategories` | `subcategories` or `top-level` |
-| Parent category | `category_id` | integer | Settings default | Parent category ID (ignored if `auto="true"`) |
-| Exclude category IDs | `exclude` | string | - | Comma-separated IDs, e.g. `"10,20,30"` |
-| Images | `show_images` | boolean | Settings default | `true` / `false` |
-| Limit | `limit` | integer | Settings default | Max categories (0 = no limit) |
-| Show "View All" button | `show_view_all` | boolean | `true` | `false` hides the "View All" button even when `limit` cuts the list |
-| Columns | `columns` | integer | Settings default | 2–6 |
-| Style | `style` | string | Settings default | `classic`, `modern`, `minimal`, `card`, `text` |
-| Hover effect | `hover_effect` | boolean | Settings default | `true` / `false` |
-| Image border radius | `image_radius` | integer | Settings default | 0–50 px |
-| Button color | `button_color` | string | Settings default | Hex color for "View All" |
-| — | `force_update` | boolean | `false` | Bypass cache for this render (shortcode only) |
+## Performance and integration
 
-### Shortcode examples
+Term metadata and attachments for displayed categories are primed in batches. The widget-detection flag is autoloaded; startup no longer reads asset modification times. These changes reduce overhead but do not guarantee zero cost or a specific query count.
 
-```php
-[categories_grid auto="true"]
-[categories_grid category_id="5" limit="10"]
-[categories_grid category_id="5" limit="10" show_view_all="false"]
-[categories_grid auto="true" style="modern" columns="4" show_images="true"]
-[categories_grid type="top-level" limit="0"]
-[categories_grid category_id="5" exclude="10,20" show_images="false"]
-[categories_grid auto="true" style="card" columns="3" limit="6" hover_effect="true" button_color="#ff6b6b"]
-```
+Images reserve dimensions. First-row images are not explicitly marked lazy; later images use native lazy loading. WordPress and optimization plugins may further process images. CSS is eligible for WordPress-managed inlining; late renders retain the stylesheet-link fallback. Themes, CSP and delayed-CSS tools may affect the result. Verify CLS, LCP and visual appearance on representative site pages.
 
-### "View All" button
+Filters: `scg_has_shortcode`, `scg_placeholder_image`, `scg_inline_styles`, `scg_print_late_styles`. The core `wp_lazy_loading_enabled` filter is consulted with context `scg_grid`; clear grid caches after changing rendering filters.
 
-The button is rendered only when **both** conditions are met: `limit > 0` **and** the parent has more categories than `limit`. For subcategories it links to the parent category archive; for `type="top-level"` it uses the **View All URL** setting (empty = no button). To keep the limit but hide the button, use `show_view_all="false"` (block: *Show "View All" button* toggle).
+Existing card wrappers and class names are retained. Images are clickable; the title remains the accessible keyboard link. DOM simplification and a redesign of all styles are deferred.
 
-### Auto Mode Details
+## Development and verification
 
-When auto mode is on (block toggle or `auto="true"`):
+Edit `assets/front.css`, not `front.min.css`. The existing Build assets workflow rebuilds and commits the minified stylesheet. Release packaging rebuilds it again. Enable SCRIPT_DEBUG in development and increment the version when shipping asset changes.
 
-- **Automatic Detection** from category archive pages, single posts (Yoast / Rank Math primary category, otherwise the deepest assigned category) or the current post in the loop.
-- **Direct Subcategories Only**: only 1 level of subcategories is shown.
-- **No Subcategories**: the block/shortcode renders nothing.
-- **Editor preview**: not available for auto mode (the editor has no "current category"); a placeholder is shown instead and the grid renders on the front end.
+The PHP header, class constant and block metadata versions must match. Release notes use the matching changelog heading. Create a `vX.Y.Z` tag only after CI and site acceptance checks pass.
 
-## ⚙️ Settings
+The regression workflow runs PHP syntax checks and isolated renderer/cache fixtures on PHP 7.4 and 8.3, plus JavaScript syntax checks. These are not WordPress integration tests, browser screenshots or Lighthouse measurements.
 
-Access plugin settings via **Settings → Categories Grid** in WordPress admin.
+## Removal
 
-### General Settings
+Uninstall removes plugin options and database-backed transients, including on multisite, without flushing the shared object cache. Persistent-cache entries that cannot be enumerated expire by TTL (at most one week for new entries).
 
-- **Default Category**: Default parent category for subcategories display
-- **Exclude Categories**: Global category exclusion list (comma-separated IDs)
-- **Cache Duration**: 1 Hour / 12 Hours / 1 Day (default) / 1 Week / No Caching
-- **Default Category Limit**: Default number of categories to display (0 = unlimited)
-- **View All URL**: URL for "View All" button on top-level categories
+## Changelog
 
-### Display Settings
-
-- **Default Columns**: Grid columns (2-6, default: 6)
-- **Image Border Radius**: Image corner radius (0-50px, default: 3px)
-- **Hover Effect**: Enable/disable hover animations
-- **Default Image**: Fallback image URL for categories without images
-- **Show Images by Default**: Global image display toggle
-- **Button Color**: "View All" button color (default: `#b93434`)
-- **Grid Style**: Classic / Modern / Minimal / Card / Text Only
-
-### Cache Management
-
-- **Clear Cache**: Manual cache clearing button in settings
-- **Auto-clear**: Cache automatically clears when:
-  - Settings are saved
-  - Categories are created/edited/deleted
-  - A category image (term meta `logo`) is added, changed or removed
-
-## 🎨 Customization
-
-### CSS Customization
-
-The plugin uses CSS custom properties for easy theming:
-
-```css
-.scg-grid {
-    --scg-columns: 6;
-    --scg-image-radius: 3px;
-    --scg-button-color: #b93434;
-}
-```
-
-The block additionally supports `alignwide` / `alignfull` and margin controls via block supports.
-
-### Hooks and Filters
-
-| Filter | Arguments | Description |
-|--------|-----------|-------------|
-| `scg_has_shortcode` | `bool $found` | Override shortcode detection (useful for page builders) |
-| `scg_placeholder_image` | `string $url` | Replace or disable (`''`) the fallback image |
-| `scg_print_late_styles` | `bool $print` | Return `false` to stop the plugin from printing its stylesheet link right before the grid when the page head has already been sent |
-
-The core filter `wp_lazy_loading_enabled` is respected (context `scg_grid`): when it returns `false`, no `loading="lazy"` attributes are added.
-
-Example:
-```php
-add_filter('scg_has_shortcode', function ($found) {
-    return $found || is_page('my-category-page');
-});
-```
-
-## 🔧 Technical Details
-
-### Block implementation
-
-- Dynamic block `smart-cat-grid/categories-grid` (`apiVersion` 3, works inside the iframed editor of WordPress 7.x)
-- No build step: `block/index.js` uses `wp.element.createElement` and WordPress globals (`wp.blocks`, `wp.blockEditor`, `wp.components`, `wp.coreData`, `wp.serverSideRender`)
-- `render_callback` maps block attributes onto the shortcode attributes, so caching, sorting and image handling are identical for both entry points
-- Stylesheet handle `scg-front` is registered once and referenced from `block.json`; the shortcode enqueues the same handle, so CSS is never loaded twice
-
-### Performance Optimizations
-
-- **Generation-based cache**: Every cache key includes `scg_cache_gen`; clearing the cache just increments that number (O(1), no `LIKE … DELETE` on `wp_options`, works with Redis/Memcached)
-- **No N+1 queries**: `update_term_meta_cache` is enabled only when images are shown, and all attachment posts/meta are primed via `_prime_post_caches()` before rendering
-- **Context-independent markup**: `loading` attributes are deterministic (first row eager, the rest `loading="lazy"`, always `decoding="async"`), so the cached HTML is correct wherever it is reused. The plugin never touches WordPress' per-page media counter; first-row images inside post content are still refined by core (`wp_filter_content_tags`) for that particular page
-- **No flash of unstyled grid**: when the grid is rendered after `wp_head` and the stylesheet is not in the head (shortcode in a theme template, term description, synced pattern, unsupported page builder), a `<link rel="stylesheet">` is printed right before the markup instead of leaving the CSS for the footer
-- **Retina `srcset`**: a 2x candidate is added only when a real 240x192 intermediate exists (never the full-size original)
-- **Conditional Asset Loading**: CSS loads only when the block/shortcode is present; the minified file is used unless `SCRIPT_DEBUG` is enabled
-- **CLS Prevention**: `width`/`height` attributes plus `aspect-ratio` reserve space before images load
-
-### Image Handling
-
-- Image sizes: `scg-thumb` (120x96) and `scg-thumb-2x` (240x192), both hard-cropped
-- Category image is read from term meta key `logo` (attachment ID)
-- Fallback order: category image → **Default Image** setting → `assets/placeholder.png` → no image
-
-### Cache System
-
-- WordPress Transients API with a generation number in the key
-- Automatic invalidation on category and category-image changes
-- Configurable duration; `0` disables caching
-- `uninstall.php` removes all options and leftover transients
-
-## 📁 File Structure
-
-```
-smart-categories-grid/
-├── .github/workflows/
-│   ├── build-assets.yml       # Rebuilds front.min.css when front.css changes
-│   ├── ci.yml                 # php -l matrix + consistency checks
-│   └── release.yml            # ZIP build + GitHub Release on tag
-├── assets/
-│   ├── admin.css              # Admin panel styles
-│   ├── admin.js               # Admin panel JavaScript
-│   ├── front.css              # Frontend grid styles (source — edit this file)
-│   ├── front.min.css          # Generated by CI from front.css, do not edit by hand
-│   └── placeholder.png        # Default category image placeholder
-├── block/
-│   ├── block.json             # Block metadata (attributes, supports, asset handles)
-│   └── index.js               # Block editor UI (no build step)
-├── languages/
-│   └── smart-cat-grid.pot     # Translation template (PHP + JS + block.json strings)
-├── smart-categories-grid.php  # Main plugin file
-├── uninstall.php              # Cleanup on plugin deletion
-└── README.md                  # This file
-```
-
-## 🔒 Security
-
-- All user inputs are sanitized and validated
-- Proper escaping for all outputs
-- Nonce verification and capability checks for AJAX requests
-- `Update URI` header prevents accidental updates from an unrelated wordpress.org plugin with the same slug
-
-## 🌍 Internationalization
-
-Translation-ready; text domain `smart-cat-grid`. PHP translations are loaded from `/languages` on `init`; block editor strings use `wp_set_script_translations()` (JSON files generated with `wp i18n make-json`). The template `languages/smart-cat-grid.pot` covers PHP, JS and `block.json` strings.
-
-## ✅ Compatibility
-
-- **WordPress**: 6.3+
-- **Tested up to**: 7.1
-- **PHP**: 7.4+ (ICU `intl` extension recommended for locale-aware sorting)
-- **Themes**: Compatible with most WordPress themes, including block themes
-- **Caching**: Works with page caches and persistent object caches (Redis, Memcached)
-
-## 🐛 Troubleshooting
-
-### Images Not Displaying
-
-1. Check if the category has an attachment ID in term meta `logo`
-2. Regenerate thumbnails (both `scg-thumb` and `scg-thumb-2x`) using "Regenerate Thumbnails"
-3. Verify the default image URL in settings or that `assets/placeholder.png` exists
-
-### Block preview is empty
-
-1. Auto mode never previews in the editor — this is expected
-2. For other modes check that the chosen parent category has direct subcategories
-3. Open the browser console: a REST error from `/wp/v2/block-renderer/` usually points to a PHP notice in a theme or another plugin
-
-### Cache Not Clearing
-
-1. Use the "Clear Cache" button in settings
-2. Make sure the `scg_cache_gen` option is writable (it is incremented on every clear)
-
-### Grid Not Responsive
-
-1. Clear browser / page cache
-2. Verify `front.min.css` is loading (check browser console)
-3. Check for theme CSS conflicts
-
-## 🛠️ Development
-
-- Edit `assets/front.css` only. After the change reaches `main`, the **Build assets** workflow minifies it with clean-css, checks the result and commits `assets/front.min.css` back to `main` (commit `build: rebuild front.min.css`). Run `git pull` before your next commit.
-- The **Release** workflow minifies the CSS again from the tagged source, so a release ZIP can never contain a stale `front.min.css`.
-- With `SCRIPT_DEBUG` enabled WordPress loads `front.css` directly, which is convenient for local work.
-
-## 🚢 Releasing
-
-1. Bump `Version:` in the plugin header, `const VERSION` in the class and `version` in `block/block.json` (CI fails if they differ)
-2. Add a `### Version X.Y.Z` section to the changelog below
-3. Push a tag `vX.Y.Z` — the Release workflow lints the code, verifies the versions match, rebuilds the minified CSS, builds the ZIP and publishes a GitHub Release with these notes
-
-## 📝 Changelog
+### Version 2.4.0
+- Added `hide_empty` / `hideEmpty` using WordPress hierarchical term queries.
+- Invalidate grids after category-count updates; use unique cache-generation tokens.
+- Made images clickable while retaining accessible title links.
+- Use an autoloaded widget flag and ignore inactive widgets.
+- Remove startup asset-stat calls; register editor scripts only in administration.
+- Enable optional WordPress-managed CSS inlining and thumbnail-sized default images.
+- Bypass cache reads and writes when caching is disabled.
+- Remove global cache flushing from uninstall; add multisite cleanup.
+- Add isolated regression tests and refresh translations and professional descriptions.
 
 ### Version 2.3.2
-- **Fixed (LCP)**: a cached grid no longer changes WordPress' per-page media counter. On cache hits the counter was increased before core processed the post content, so images placed above the grid in the same post could get `loading="lazy"`
-- **Fixed (LCP / page weight)**: `loading` attributes are now deterministic — first row eager, the rest lazy — instead of depending on where the grid was rendered when the cache was filled. A grid first rendered in a theme template could previously be cached with every image eager
-- **Fixed (CLS)**: when the grid is rendered after `wp_head` and its stylesheet is not in the head (shortcode in a theme template, term description, synced pattern, unsupported page builder), the stylesheet link is printed right before the grid instead of in the footer. New filter `scg_print_late_styles`
-- **CI**: new **Build assets** workflow rebuilds `assets/front.min.css` with clean-css whenever `front.css` changes and commits it to `main`; the Release workflow rebuilds it before packaging
-- **CI**: version consistency check now includes `block/block.json`
+- Remove direct media-counter manipulation; add deterministic loading attributes, a late CSS fallback and automatic CSS minification.
 
 ### Version 2.3.1
-- **New**: shortcode attribute `show_view_all` / block toggle *Show "View All" button* (`showViewAll`, default `true`) — hides the "View All" button while keeping `limit`; the flag is part of the cache key
-- **Docs**: README section on when the "View All" button is rendered
+- Add per-grid View All control.
 
 ### Version 2.3.0
-- **New**: Gutenberg block `smart-cat-grid/categories-grid` with live `ServerSideRender` preview, hierarchical parent-category picker and all display overrides in the sidebar; supports wide/full alignment and margin controls
-- **New**: shared stylesheet handle `scg-front` registered on `init` and referenced from `block.json` — block and shortcode never load CSS twice
-- **New**: `languages/smart-cat-grid.pot` regenerated (84 strings: PHP, JS and `block.json`); `wp_set_script_translations()` for the editor script
-- **Improved**: `admin.js` — color picker initialised from the script (inline script removed), `wp.media` guard, `aria-busy` + `wp.a11y.speak()` for the Clear Cache action, `ajax_url` passed via `wp_localize_script`
-- **Improved**: `style` attribute validated against the allowed list and `image_radius` capped at 50 before reaching the cache key
-- **Improved**: shortcode detection also recognises the block in post content and block widgets
-- **Chore**: old `languages/sc-grid.pot` removed; README restructured around block + shortcode
+- Add a dynamic editor block sharing the shortcode renderer.
 
 ### Version 2.2.0
-- **Fixed**: cache was never invalidated on sites with a persistent object cache (Redis/Memcached) — replaced `LIKE … DELETE` with generation-based keys
-- **Fixed**: changing a category image (term meta `logo`) did not clear the cache — added `added/updated/deleted_term_meta` hooks
-- **Fixed**: widget shortcode detection transient was not reset when widgets changed — hooked `update_option_widget_text/_block`
-- **Fixed**: non-ASCII (e.g. Cyrillic) category names were sorted by byte value — now uses ICU `Collator` with `mb_strtolower` fallback
-- **Fixed**: translations could not load (`load_plugin_textdomain` was missing)
-- **Perf**: term meta primed in one query; attachment posts/meta primed with `_prime_post_caches()`
-- **Perf**: removed `will-change: transform`; shipped `front.min.css`; placeholder URL resolved once per request
-- **New**: 2x Retina image size `scg-thumb-2x` with `srcset`; `scg_placeholder_image` filter; `uninstall.php`
-- **Chore**: `Tested up to: 7.1`, `Requires at least: 6.3`, `Update URI`, `Domain Path`; modern `register_setting()` args
+- Improve caching, metadata priming and high-density thumbnails.
 
-### Version 2.1.0
-- WordPress 7.0 compatibility headers
-- LCP / CLS / INP fixes (eager first image, `aspect-ratio`, explicit transitions)
-- Asset versions computed once; instance-level image cache; widget transient cache
+## License and support
 
-### Version 2.0.1
-- Performance optimizations, improved caching, enhanced security, code refactoring
-
-### Version 1.9
-- Initial stable release
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly (CI runs `php -l` on PHP 7.4–8.4 and consistency checks)
-5. Submit a pull request
-
-## 📄 License
-
-This plugin is licensed under the [GNU General Public License v2.0](https://www.gnu.org/licenses/gpl-2.0.html).
-
-## 💬 Support
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/gemuzkm/smart-categories-grid/issues)
-
-## 👤 Author
-
-**TM** — [github.com/gemuzkm](https://github.com/gemuzkm)
-
----
-
-⭐ If you find this plugin useful, please consider giving it a star on GitHub!
+GPL v2 or later. Author: TM. Report reproducible issues through GitHub Issues with WordPress/PHP versions, theme and grid configuration.
