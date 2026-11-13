@@ -39,10 +39,16 @@ jobs:
           set -e
           HEADER_VERSION=$(grep -m1 -E '^\s*Version:' "${PLUGIN_SLUG}.php" | sed -E 's/^\s*Version:\s*//; s/\s+$//')
           CONST_VERSION=$(grep -m1 -E "const VERSION\s*=\s*'[^']+'" "${PLUGIN_SLUG}.php" | sed -E "s/.*'([^']+)'.*/\1/")
+          BLOCK_VERSION=$(grep -m1 '"version"' block/block.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
           echo "Header version: ${HEADER_VERSION}"
           echo "Const  version: ${CONST_VERSION}"
+          echo "Block  version: ${BLOCK_VERSION}"
           if [ "${HEADER_VERSION}" != "${CONST_VERSION}" ]; then
             echo "::error::Plugin header Version (${HEADER_VERSION}) does not match class constant VERSION (${CONST_VERSION})"
+            exit 1
+          fi
+          if [ "${HEADER_VERSION}" != "${BLOCK_VERSION}" ]; then
+            echo "::error::Plugin header Version (${HEADER_VERSION}) does not match block/block.json version (${BLOCK_VERSION})"
             exit 1
           fi
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
@@ -54,8 +60,24 @@ jobs:
           fi
           echo "version=${HEADER_VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify minified CSS is present
-        run: test -f assets/front.min.css || { echo "::error::assets/front.min.css is missing"; exit 1; }
+      # The ZIP always ships CSS minified from the tagged front.css, even if the
+      # tag was pushed before the "Build assets" workflow committed its result.
+      - name: Rebuild minified CSS
+        run: |
+          set -e
+          npx --yes clean-css-cli@5 -O1 -o assets/front.min.css assets/front.css
+          test -s assets/front.min.css
+          OPEN=$(tr -cd '{' < assets/front.min.css | wc -c)
+          CLOSE=$(tr -cd '}' < assets/front.min.css | wc -c)
+          if [ "${OPEN}" -eq 0 ] || [ "${OPEN}" -ne "${CLOSE}" ]; then
+            echo "::error::front.min.css has unbalanced braces (${OPEN} vs ${CLOSE})"
+            exit 1
+          fi
+          grep -Eq 'repeat\(min\(var\(--scg-columns, ?6\), ?2\), ?1fr\)' assets/front.min.css \
+            || { echo "::error::responsive grid rule is missing from front.min.css"; exit 1; }
+          grep -Eq 'aspect-ratio: ?120 ?/ ?96' assets/front.min.css \
+            || { echo "::error::aspect-ratio rule is missing from front.min.css"; exit 1; }
+          ls -l assets/front.css assets/front.min.css
 
       - name: Extract changelog for this version
         id: changelog

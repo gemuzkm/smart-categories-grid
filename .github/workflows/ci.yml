@@ -42,13 +42,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Header Version == class VERSION
+      - name: Header Version == class VERSION == block.json version
         run: |
           set -e
           H=$(grep -m1 -E '^\s*Version:' smart-categories-grid.php | sed -E 's/^\s*Version:\s*//; s/\s+$//')
           C=$(grep -m1 -E "const VERSION\s*=\s*'[^']+'" smart-categories-grid.php | sed -E "s/.*'([^']+)'.*/\1/")
-          echo "header=$H const=$C"
+          B=$(grep -m1 '"version"' block/block.json | sed -E 's/.*"version"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+          echo "header=$H const=$C block=$B"
           [ "$H" = "$C" ] || { echo "::error::Version mismatch: header=$H const=$C"; exit 1; }
+          [ "$H" = "$B" ] || { echo "::error::Version mismatch: header=$H block.json=$B"; exit 1; }
 
       - name: Changelog entry exists for current version
         run: |

@@ -3,7 +3,7 @@
 Plugin Name: Smart Categories Grid
 Plugin URI: https://github.com/gemuzkm/smart-categories-grid
 Description: Responsive category grid with caching, advanced settings, category exclusion, optional image display, and category limit
-Version: 2.3.1
+Version: 2.3.2
 Author: TM
 Author URI: https://github.com/gemuzkm
 Text Domain: smart-cat-grid
@@ -34,7 +34,7 @@ class SmartCategoriesGrid {
     private const STYLE_HANDLE       = 'scg-front';
     private const BLOCK_SCRIPT       = 'scg-block-editor';
     private const BLOCK_NAME         = 'smart-cat-grid/categories-grid';
-    private const VERSION            = '2.3.1';
+    private const VERSION            = '2.3.2';
 
     private array $settings = [];
     private array $image_cache    = [];
@@ -225,10 +225,6 @@ class SmartCategoriesGrid {
     public function renderGrid($atts): string {
         self::$shortcode_used = true;
 
-        if (!wp_style_is(self::STYLE_HANDLE, 'enqueued') && !wp_style_is(self::STYLE_HANDLE, 'done')) {
-            $this->enqueueStyles();
-        }
-
         $atts = shortcode_atts([
             'category_id'  => '',
             'type'         => 'subcategories',
@@ -290,11 +286,57 @@ class SmartCategoriesGrid {
             'show_view_all' => $show_view_all,
         ];
 
-        if ($force_update) {
-            return $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings)['html'];
+        $grid = $force_update
+            ? $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings)
+            : $this->getCachedGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
+
+        if ($grid === '') {
+            return '';
         }
 
-        return $this->getCachedGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
+        return $this->ensureStyles() . $grid;
+    }
+
+    /**
+     * Make sure the stylesheet is applied before the grid is painted.
+     *
+     * Normal case: the page <head> is not printed yet, so the style is enqueued
+     * and WordPress prints it in the head.
+     *
+     * Late case: the grid is rendered after wp_head and the early detection in
+     * preCheckShortcode() could not see it (shortcode called from a theme
+     * template, a term description, a synced pattern, an unsupported builder).
+     * An enqueued style would then be printed in the footer, so the grid would
+     * be painted unstyled first and re-laid out afterwards (layout shift).
+     * A stylesheet link placed right before the markup blocks rendering of the
+     * content that follows it, which prevents that.
+     *
+     * The link is intentionally not tracked in WP_Styles: the shortcode can be
+     * executed in contexts whose output is discarded (excerpts, SEO meta
+     * descriptions), and marking the handle as printed there would leave the
+     * real grid without CSS.
+     */
+    private function ensureStyles(): string {
+        if (wp_style_is(self::STYLE_HANDLE, 'done')) {
+            return '';
+        }
+
+        $head_printed = did_action('wp_head') && !doing_action('wp_head');
+
+        /**
+         * Filter whether the stylesheet link is printed right before the grid
+         * when the page head has already been sent.
+         *
+         * @param bool $print Default true.
+         */
+        if ($head_printed && apply_filters('scg_print_late_styles', true)) {
+            $file = $this->frontStyleFile();
+            $url  = add_query_arg('ver', rawurlencode($this->assetVersion($file)), plugins_url($file, __FILE__));
+            return '<link rel="stylesheet" href="' . esc_url($url) . '" media="all">' . "\n";
+        }
+
+        $this->enqueueStyles();
+        return '';
     }
 
     private function getCurrentCategory(): int {
@@ -431,28 +473,23 @@ class SmartCategoriesGrid {
         ];
         $cacheKey = self::CACHE_PREFIX . md5(implode('|', $key_parts));
 
+        // The cached markup is context-independent: it never touches WordPress'
+        // per-page media counter, so a cache hit cannot change how core treats
+        // other images on the page.
         $cached = get_transient($cacheKey);
         if (is_array($cached) && isset($cached['html'])) {
-            // Keep WordPress' per-page media counter accurate so lazy-loading
-            // decisions for images rendered after this grid stay correct.
-            if (!empty($cached['media']) && function_exists('wp_increase_content_media_count')) {
-                wp_increase_content_media_count((int) $cached['media']);
-            }
             return (string) $cached['html'];
         }
 
-        $result    = $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
+        $html      = $this->generateGrid($parent, $exclude_ids, $show_images, $limit, $grid_settings);
         $cacheTime = (int) ($this->settings['cache_time'] ?? DAY_IN_SECONDS);
         if ($cacheTime > 0) {
-            set_transient($cacheKey, $result, $cacheTime);
+            set_transient($cacheKey, ['html' => $html], $cacheTime);
         }
-        return $result['html'];
+        return $html;
     }
 
-    /**
-     * @return array{html:string, media:int}
-     */
-    private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): array {
+    private function generateGrid(int $parent, array $exclude_ids, bool $show_images, int $limit, array $grid_settings): string {
         $display_images = ($grid_settings['style'] === 'text') ? false : $show_images;
 
         $args = [
@@ -471,7 +508,7 @@ class SmartCategoriesGrid {
 
         $categories = get_terms($args);
         if (empty($categories) || is_wp_error($categories)) {
-            return ['html' => '', 'media' => 0];
+            return '';
         }
 
         usort($categories, function (WP_Term $a, WP_Term $b): int {
@@ -508,7 +545,12 @@ class SmartCategoriesGrid {
         $columns      = absint($grid_settings['columns']);
         $image_radius = absint($grid_settings['image_radius']);
         $button_color = sanitize_hex_color($grid_settings['button_color']) ?: '#b93434';
-        $media_count  = 0;
+
+        // Deterministic loading attributes: the first row stays eager, every
+        // following image is lazy. The result does not depend on where on the
+        // page the grid is rendered, so it is safe to cache and reuse.
+        $lazy_enabled = wp_lazy_loading_enabled('img', 'scg_grid');
+        $image_index  = 0;
 
         ob_start();
         ?>
@@ -524,8 +566,8 @@ class SmartCategoriesGrid {
                 <div class="scg-col">
                     <div class="scg-card<?php echo esc_attr($hover_class); ?>">
                         <?php if ($image) :
-                            $media_count++;
-                            echo '<div class="scg-image">' . $this->buildImgTag($image, $cat->name) . '</div>';
+                            echo '<div class="scg-image">' . $this->buildImgTag($image, $cat->name, $lazy_enabled && $image_index >= $columns) . '</div>';
+                            $image_index++;
                         endif; ?>
                         <div class="scg-title">
                             <a href="<?php echo esc_url($term_link); ?>"><?php echo esc_html($cat->name); ?></a>
@@ -551,16 +593,20 @@ class SmartCategoriesGrid {
             endif; ?>
         </div>
         <?php
-        return ['html' => (string) ob_get_clean(), 'media' => $media_count];
+        return (string) ob_get_clean();
     }
 
     /**
-     * Build an <img> tag, letting core decide loading / fetchpriority / decoding
-     * based on its per-page media counter (wp_get_loading_optimization_attributes).
+     * Build an <img> tag with explicit dimensions (no layout shift) and a
+     * loading attribute chosen by the caller.
+     *
+     * Images without a loading attribute that end up inside post content are
+     * still refined by WordPress core (wp_filter_content_tags), which knows
+     * what else is on that particular page.
      *
      * @param array{src:string, srcset:string} $image
      */
-    private function buildImgTag(array $image, string $alt): string {
+    private function buildImgTag(array $image, string $alt, bool $lazy): string {
         $attr = [
             'src'    => $image['src'],
             'alt'    => $alt,
@@ -570,16 +616,10 @@ class SmartCategoriesGrid {
         if (!empty($image['srcset'])) {
             $attr['srcset'] = $image['srcset'];
         }
-
-        if (function_exists('wp_get_loading_optimization_attributes')) {
-            $attr = array_merge($attr, wp_get_loading_optimization_attributes('img', $attr, 'scg_grid'));
-        } else {
-            $attr['loading']  = 'lazy';
-            $attr['decoding'] = 'async';
+        if ($lazy) {
+            $attr['loading'] = 'lazy';
         }
-        if (empty($attr['decoding'])) {
-            $attr['decoding'] = 'async';
-        }
+        $attr['decoding'] = 'async';
 
         $html = '<img';
         foreach ($attr as $name => $value) {

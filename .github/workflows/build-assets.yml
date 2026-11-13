@@ -1,0 +1,57 @@
+name: Build assets
+
+# Rebuilds assets/front.min.css with clean-css whenever assets/front.css changes
+# and commits the result back to main. A push made with GITHUB_TOKEN does not
+# start other workflows, so there is no loop.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/front.css"
+      - ".github/workflows/build-assets.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-assets
+
+jobs:
+  build:
+    name: Minify CSS
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Minify with clean-css
+        run: |
+          set -e
+          npx --yes clean-css-cli@5 -O1 -o assets/front.min.css assets/front.css
+          test -s assets/front.min.css
+          OPEN=$(tr -cd '{' < assets/front.min.css | wc -c)
+          CLOSE=$(tr -cd '}' < assets/front.min.css | wc -c)
+          if [ "${OPEN}" -eq 0 ] || [ "${OPEN}" -ne "${CLOSE}" ]; then
+            echo "::error::front.min.css has unbalanced braces (${OPEN} vs ${CLOSE})"
+            exit 1
+          fi
+          grep -Eq 'repeat\(min\(var\(--scg-columns, ?6\), ?2\), ?1fr\)' assets/front.min.css \
+            || { echo "::error::responsive grid rule is missing from front.min.css"; exit 1; }
+          grep -Eq 'aspect-ratio: ?120 ?/ ?96' assets/front.min.css \
+            || { echo "::error::aspect-ratio rule is missing from front.min.css"; exit 1; }
+          ls -l assets/front.css assets/front.min.css
+
+      - name: Commit if changed
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/front.min.css
+          if git diff --cached --quiet; then
+            echo "front.min.css is already up to date"
+          else
+            git commit -m "build: rebuild front.min.css"
+            git push
+          fi
