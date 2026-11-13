@@ -1,0 +1,67 @@
+name: Layout and Lighthouse checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'assets/front.css'
+      - 'assets/front.min.css'
+      - '.github/tests/layout.py'
+      - '.github/workflows/performance.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'assets/front.css'
+      - 'assets/front.min.css'
+      - '.github/tests/layout.py'
+      - '.github/workflows/performance.yml'
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'Optional public HTTPS page with the grid (no credentials or private query tokens)'
+        required: false
+        type: string
+permissions:
+  contents: read
+jobs:
+  layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rebuild production CSS
+        run: npx --yes clean-css-cli@5 -O1 -o assets/front.min.css assets/front.css
+      - name: Install isolated browser test environment
+        run: |
+          python3 -m venv "$RUNNER_TEMP/scg-layout"
+          "$RUNNER_TEMP/scg-layout/bin/pip" install playwright==1.51.0
+          echo "$RUNNER_TEMP/scg-layout/bin" >> "$GITHUB_PATH"
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Test source and rebuilt minified styles
+        run: python .github/tests/layout.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: synthetic-layout-results
+          path: .github/layout-results.json
+          if-no-files-found: warn
+  lighthouse:
+    if: github.event_name == 'workflow_dispatch' && inputs.url != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      AUDIT_URL: ${{ inputs.url }}
+    steps:
+      - name: Validate public HTTPS URL
+        run: |
+          node -e 'const u = new URL(process.env.AUDIT_URL); if (u.protocol !== "https:" || u.username || u.password || u.hostname === "localhost") throw new Error("Use a public HTTPS URL without credentials");'
+      - name: Run mobile Lighthouse audit
+        run: |
+          mkdir -p reports
+          npx --yes lighthouse@12 "$AUDIT_URL" --only-categories=performance,accessibility,best-practices,seo --output=json --output=html --output-path=reports/lighthouse --chrome-flags="--headless --no-sandbox"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mobile-lighthouse-report
+          path: reports/
+          if-no-files-found: warn
