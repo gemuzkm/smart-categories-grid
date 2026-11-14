@@ -59,7 +59,7 @@ Uninstall removes plugin options and database-backed transients, including on mu
 
 ### Version 2.4.1
 - Fix a block with parent "Default (from settings)" rendering nothing; it inherits the default category again.
-- Restore the 2.3.2 look of the five styles; keep reserved image space and 44 px link targets. Hover effects apply to pointer devices only.
+- Restore the 2.3.2 look of the five styles and keep reserved image space. Touch screens get 44 px link targets; hover effects apply to pointer devices only.
 - Restore image alt text, block field hints, the empty-result placeholder, and the settings page sections, descriptions and usage help.
 - Use one stable cache entry per grid configuration; invalidation overwrites it instead of adding a transient.
 - Add the file modification time to asset URLs.
