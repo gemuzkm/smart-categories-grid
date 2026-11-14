@@ -1,12 +1,30 @@
 <?php
 // Isolated renderer fixtures, not a WordPress integration environment.
 define('ABSPATH', __DIR__);
-define('DAY_IN_SECONDS',86400); define('WEEK_IN_SECONDS',604800);
+define('HOUR_IN_SECONDS',3600); define('DAY_IN_SECONDS',86400); define('WEEK_IN_SECONDS',604800);
 $GLOBALS['options']=['scg_settings'=>['cache_time'=>86400]];
 $GLOBALS['transients']=[]; $GLOBALS['queries']=[]; $GLOBALS['head']=false;
+$GLOBALS['actions']=[]; $GLOBALS['updates']=0;
+$GLOBALS['site_transients']=[]; $GLOBALS['http']=null; $GLOBALS['http_calls']=0;
+$GLOBALS['done']=true; $GLOBALS['did']=[];
 function add_action(...$a) {} function register_activation_hook(...$a) {} function add_shortcode(...$a) {}
+function add_filter(...$a) {}
+function plugin_basename($f) {return 'smart-categories-grid/smart-categories-grid.php';}
+function plugin_dir_path($f) {return dirname($f).'/';}
+function plugins_url($p,$f) {return '/plugins/smart-categories-grid/'.$p;}
+function add_query_arg($k,$v,$u) {return $u.'?'.$k.'='.$v;}
+function apply_filters($h,$v,...$a) {return $v;}
+function doing_action($h) {return false;}
+function wp_register_style(...$a) {} function wp_style_add_data(...$a) {} function wp_enqueue_style(...$a) {}
+function get_site_transient($k) {return $GLOBALS['site_transients'][$k] ?? false;}
+function set_site_transient($k,$v,$t) {$GLOBALS['site_transients'][$k]=$v;}
+function wp_remote_get($u,$a=[]) {$GLOBALS['http_calls']++;return $GLOBALS['http'];}
+function wp_remote_retrieve_response_code($r) {return $r['code'];}
+function wp_remote_retrieve_body($r) {return $r['body'];}
+function did_action($h) {return $GLOBALS['did'][$h] ?? 0;}
+function do_action($h,...$a) {$GLOBALS['actions'][]=$h;}
 function get_option($k,$d=false) {return $GLOBALS['options'][$k] ?? $d;}
-function update_option($k,$v,$a=null) {$GLOBALS['options'][$k]=$v;}
+function update_option($k,$v,$a=null) {$GLOBALS['options'][$k]=$v;$GLOBALS['updates']++;}
 function delete_option($k) {unset($GLOBALS['options'][$k]);}
 function wp_generate_uuid4() {static $i=0;return 'fixture-'.++$i;}
 function get_locale() {return 'en_US';}
@@ -18,7 +36,7 @@ function sanitize_hex_color($v) {return preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})
 function esc_attr($v) {return htmlspecialchars((string)$v,ENT_QUOTES);}
 function esc_html($v) {return esc_attr($v);} function esc_url($v) {return esc_attr($v);}
 function esc_html__($v,$d) {return $v;}
-function wp_style_is($h,$s) {return true;}
+function wp_style_is($h,$s) {return $GLOBALS['done'];}
 function get_block_wrapper_attributes() {return 'class="wp-block"';}
 function get_terms($a) {
     $GLOBALS['queries'][]=$a;
@@ -45,10 +63,16 @@ $p->onTermCacheClean([1],'category');$p->renderGrid($a);
 check(count($GLOBALS['queries'])===2,'category count update invalidates grids');
 check(count($GLOBALS['transients'])===$n,'invalidation overwrites the cache entry instead of adding one');
 check($x===$p->renderGrid($a) && count($GLOBALS['queries'])===2,'regenerated entry is served from cache');
+check(!isset($GLOBALS['options']['scg_cache_gen']) && $GLOBALS['updates']===0,'generation token is not written before shutdown');
+$p->onTermCacheClean([1],'category');$p->onTermCacheClean([2],'category');$p->persistCacheGeneration();
+check($GLOBALS['updates']===1 && isset($GLOBALS['options']['scg_cache_gen']) && $GLOBALS['actions']===['scg_cache_cleared'],'several invalidations in one request are stored once');
 $p->renderGrid(array_merge($a,['hide_empty'=>'false']));
 check(count($GLOBALS['queries'])===3,'hide_empty changes the cache key');
-$p->renderGrid(array_merge($a,['force_update'=>'true']));
-check(count($GLOBALS['queries'])===4,'force update bypasses cache');
+$p->renderGrid(array_merge($a,['hide_empty'=>'false','force_update'=>'true']));
+check(count($GLOBALS['queries'])===3,'force_update is ignored without WP_DEBUG');
+define('WP_DEBUG', true);
+$p->renderGrid(array_merge($a,['hide_empty'=>'false','force_update'=>'true']));
+check(count($GLOBALS['queries'])===4,'force_update bypasses cache under WP_DEBUG');
 $GLOBALS['options']['scg_settings']=['cache_time'=>0];$p->init();
 $p->renderGrid($a);$p->renderGrid($a);
 check(count($GLOBALS['queries'])===6,'disabled caching bypasses reads');
@@ -57,5 +81,36 @@ $b=$p->renderBlock(['categoryId'=>0,'type'=>'subcategories','style'=>'text']);
 check(lastQuery()['parent']===5 && strpos($b,'class="wp-block"')!==false,'block without a selected parent inherits the default category');
 $p->renderBlock(['categoryId'=>7,'type'=>'subcategories','style'=>'text']);
 check(lastQuery()['parent']===7,'block uses an explicitly selected parent');
+$GLOBALS['actions']=[];$GLOBALS['empty']=true;
+$p->onAttachmentChange(77);$p->persistCacheGeneration();
+check($GLOBALS['actions']===[],'unrelated attachment edits do not invalidate grids');
+$GLOBALS['empty']=false;
+$p->onAttachmentChange(77);$p->persistCacheGeneration();
+check($GLOBALS['actions']===['scg_cache_cleared'],'category image edits invalidate grids');
+$f='smart-categories-grid/smart-categories-grid.php';
+$z='https://github.com/gemuzkm/smart-categories-grid/releases/download/v2.9.0/smart-categories-grid-2.9.0.zip';
+$GLOBALS['http']=['code'=>200,'body'=>json_encode(['tag_name'=>'v2.9.0','body'=>'Notes','assets'=>[['browser_download_url'=>$z.'.sha256'],['browser_download_url'=>$z]]])];
+$u=$p->checkForUpdate(false,[],$f);
+check(is_array($u) && $u['version']==='2.9.0' && $u['package']===$z,'update offer uses the packaged release ZIP');
+$p->checkForUpdate(false,[],$f);
+check($GLOBALS['http_calls']===1,'release lookup is cached');
+check($p->checkForUpdate(false,[],'other/other.php')===false,'other plugins are left alone');
+$GLOBALS['site_transients']=[];
+$GLOBALS['http']=['code'=>200,'body'=>json_encode(['tag_name'=>'v2.9.0','assets'=>[['browser_download_url'=>'https://example.com/smart-categories-grid-2.9.0.zip']]])];
+check($p->checkForUpdate(false,[],$f)===false,'packages outside the repository releases are rejected');
+// Stylesheet selection: a grid rendered after wp_head prints a link to its stylesheet.
+$GLOBALS['done']=false;$GLOBALS['did']['wp_head']=1;
+$t=dirname(__DIR__,2).'/assets/front-text.min.css';$had=is_file($t);
+if($had)rename($t,$t.'.bak');
+clearstatcache();
+$late=$p->renderGrid($a);
+check(strpos($late,'<link rel="stylesheet"')===0 && strpos($late,'assets/front.min.css')!==false,'late render falls back to the full stylesheet when the per-style file is missing');
+file_put_contents($t,'.scg-grid{display:grid}');
+clearstatcache();
+$late=$p->renderGrid($a);
+check(strpos($late,'assets/front-text.min.css')!==false,'late render links the stylesheet of the grid style');
+unlink($t);if($had)rename($t.'.bak',$t);
+clearstatcache();
+$GLOBALS['done']=true;$GLOBALS['did']=[];
 $GLOBALS['empty']=true;check($p->renderGrid($a)==='','empty result');
 echo "Renderer/cache fixtures passed\n";

@@ -24,7 +24,8 @@ class Handler(SimpleHTTPRequestHandler):
         style = q.get('style', ['classic'])[0]
         columns = int(q.get('columns', ['6'])[0])
         assert style in STYLES and columns in (2, 6)
-        asset = 'front.min.css' if q.get('min', ['0'])[0] == '1' else 'front.css'
+        # Minified cases load the per-style stylesheet visitors receive; source cases load the full source.
+        asset = 'front-' + style + '.min.css' if q.get('min', ['0'])[0] == '1' else 'front.css'
         cards = []
         for i in range(10):
             image = '' if style == 'text' else '<a class="scg-image" href="#target" tabindex="-1" aria-hidden="true"><img src="/slow.svg" width="120" height="96" decoding="async" alt=""></a>'

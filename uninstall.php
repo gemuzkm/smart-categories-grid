@@ -5,13 +5,13 @@ function scg_uninstall_site(): void {
     global $wpdb;
     foreach (['scg_settings','scg_show_regenerate_notice','scg_cache_gen','scg_widget_flag'] as $key) delete_option($key);
     delete_transient('scg_widget_has_shortcode');
-    $prefix = '_transient_scg_cache_';
-    do {
-        $names = $wpdb->get_col($wpdb->prepare("SELECT option_name FROM {$wpdb->options} WHERE option_name LIKE %s LIMIT 100", $wpdb->esc_like($prefix) . '%'));
-        $removed = 0;
-        foreach ($names as $name) { if (delete_transient(substr($name, strlen('_transient_')))) $removed++; }
-        if ($names && !$removed) break;
-    } while (count($names) === 100);
+    // Remove cached grid rows directly: with a persistent object cache delete_transient()
+    // never touches rows left in the options table from before that cache was enabled.
+    $wpdb->query($wpdb->prepare(
+        "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+        $wpdb->esc_like('_transient_scg_cache_') . '%',
+        $wpdb->esc_like('_transient_timeout_scg_cache_') . '%'
+    ));
     // Redis/Memcached grid entries cannot be enumerated portably; they expire
     // within the bounded TTL. Never flush the site's shared object cache.
 }
@@ -25,3 +25,5 @@ if (is_multisite()) {
 } else {
     scg_uninstall_site();
 }
+// Cached answer of the release lookup used for update checks.
+delete_site_transient('scg_release');

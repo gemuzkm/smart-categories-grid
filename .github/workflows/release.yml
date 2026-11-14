@@ -79,6 +79,17 @@ jobs:
             || { echo "::error::aspect-ratio rule is missing from front.min.css"; exit 1; }
           ls -l assets/front.css assets/front.min.css
 
+      # One stylesheet per grid style, built from the same tagged front.css.
+      - name: Build per-style stylesheets
+        run: |
+          set -e
+          node .github/scripts/build-css.js "$RUNNER_TEMP/scg-css"
+          for style in classic modern minimal card text; do
+            npx --yes clean-css-cli@5 -O1 -o "assets/front-$style.min.css" "$RUNNER_TEMP/scg-css/front-$style.css"
+            test -s "assets/front-$style.min.css"
+          done
+          ls -l assets/front-*.min.css
+
       - name: Extract changelog for this version
         id: changelog
         run: |

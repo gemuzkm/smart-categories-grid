@@ -3,7 +3,7 @@
 Plugin Name: Smart Categories Grid
 Plugin URI: https://github.com/gemuzkm/smart-categories-grid
 Description: Responsive category navigation for WordPress. Includes a block and shortcode, server-side caching, category images, display controls and five visual styles.
-Version: 2.4.1
+Version: 2.5.0
 Author: TM
 Author URI: https://github.com/gemuzkm
 Text Domain: smart-cat-grid
@@ -19,12 +19,16 @@ defined('ABSPATH') || exit;
 register_activation_hook(__FILE__, ['SmartCategoriesGrid', 'onActivationStatic']);
 
 class SmartCategoriesGrid {
-    private const VERSION = '2.4.1';
+    private const VERSION = '2.5.0';
     private const BLOCK = 'smart-cat-grid/categories-grid';
     private const FLAG = 'scg_widget_flag';
+    private const REPO = 'gemuzkm/smart-categories-grid';
+    private const SLUG = 'smart-categories-grid';
     private array $settings = [];
     private array $images = [];
     private ?string $placeholder = null;
+    private ?string $gen = null;
+    private bool $genScheduled = false;
     private static ?self $instance = null;
 
     public static function getInstance(): self {
@@ -59,8 +63,11 @@ class SmartCategoriesGrid {
             'update_option_sidebars_widgets','switch_theme'] as $hook) {
             add_action($hook, [$this, 'clearWidgetCache']);
         }
-        add_action('edit_attachment', [$this, 'clearAllCache']);
-        add_action('delete_attachment', [$this, 'clearAllCache']);
+        add_action('edit_attachment', [$this, 'onAttachmentChange']);
+        add_action('delete_attachment', [$this, 'onAttachmentChange']);
+        // The Update URI header points to github.com, so WordPress asks this filter for updates.
+        add_filter('update_plugins_github.com', [$this, 'checkForUpdate'], 10, 3);
+        add_filter('plugins_api', [$this, 'pluginInfo'], 10, 3);
     }
     public function addImageSizes(): void {
         add_image_size('scg-thumb', 120, 96, true);
@@ -73,8 +80,26 @@ class SmartCategoriesGrid {
         delete_option(self::FLAG);
         delete_transient('scg_widget_has_shortcode');
     }
-    private function styleFile(): string {
-        return defined('SCRIPT_DEBUG') && SCRIPT_DEBUG ? 'assets/front.css' : 'assets/front.min.css';
+    // Front-end grids load a stylesheet holding the shared rules and one style. The full
+    // stylesheet is used by the block editor, in SCRIPT_DEBUG mode and whenever the per-style
+    // file has not been built.
+    private function styleFile(string $style = ''): string {
+        if (defined('SCRIPT_DEBUG') && SCRIPT_DEBUG) return 'assets/front.css';
+        $file = 'assets/front-' . $style . '.min.css';
+        return $style !== '' && is_file(plugin_dir_path(__FILE__) . $file) ? $file : 'assets/front.min.css';
+    }
+    // Registers the stylesheet of one grid style on first use and returns its handle.
+    private function styleHandle(string $style): string {
+        $file = $this->styleFile($style);
+        if ($file === $this->styleFile()) return 'scg-front';
+        $handle = 'scg-front-' . $style;
+        if (!wp_style_is($handle, 'registered')) {
+            wp_register_style($handle, plugins_url($file, __FILE__), [], $this->assetVersion($file));
+            if (apply_filters('scg_inline_styles', true)) {
+                wp_style_add_data($handle, 'path', plugin_dir_path(__FILE__) . $file);
+            }
+        }
+        return $handle;
     }
     // The file time changes the asset URL whenever a file is replaced, even if the version number is not.
     private function assetVersion(string $file): string {
@@ -145,15 +170,23 @@ class SmartCategoriesGrid {
             $found = is_string($el) && strpos($el, 'categories_grid') !== false;
         }
         if (!$found) $found = $this->widgetsHaveGrid();
-        if (apply_filters('scg_has_shortcode', $found)) wp_enqueue_style('scg-front');
+        if (apply_filters('scg_has_shortcode', $found)) {
+            // The style of a grid is known only when it renders; the saved default covers the usual case.
+            $style = (string)($this->settings['grid_style'] ?? 'classic');
+            if (!in_array($style, ['classic','modern','minimal','card','text'], true)) $style = 'classic';
+            wp_enqueue_style($this->styleHandle($style));
+        }
     }
-    private function styles(): string {
-        if (wp_style_is('scg-front', 'done')) return '';
+    private function styles(string $style): string {
+        $handle = $this->styleHandle($style);
+        // The full stylesheet covers every style.
+        if (wp_style_is($handle, 'done') || wp_style_is('scg-front', 'done')) return '';
         if (did_action('wp_head') && !doing_action('wp_head') && apply_filters('scg_print_late_styles', true)) {
             // Do not mark as done: this render may be discarded by an excerpt/SEO filter.
-            return '<link rel="stylesheet" href="' . esc_url(add_query_arg('ver', $this->assetVersion($this->styleFile()), plugins_url($this->styleFile(), __FILE__))) . '" media="all">';
+            $file = $this->styleFile($style);
+            return '<link rel="stylesheet" href="' . esc_url(add_query_arg('ver', $this->assetVersion($file), plugins_url($file, __FILE__))) . '" media="all">';
         }
-        wp_enqueue_style('scg-front');
+        wp_enqueue_style($handle);
         return '';
     }
     public function onTermCacheClean($ids, $taxonomy): void {
@@ -162,10 +195,34 @@ class SmartCategoriesGrid {
     public function onTermMetaChange($id, $term, $key): void {
         if ($key === 'logo') $this->clearAllCache();
     }
+    public function onAttachmentChange($id): void {
+        $id = absint($id);
+        if (!$id) return;
+        // Only images shown in grids matter: the default image or a category logo.
+        $used = $id === absint($this->settings['default_image_id'] ?? 0);
+        if (!$used) {
+            $terms = get_terms(['taxonomy'=>'category','hide_empty'=>false,'fields'=>'ids','number'=>1,
+                'meta_key'=>'logo','meta_value'=>(string)$id,'update_term_meta_cache'=>false]);
+            $used = !is_wp_error($terms) && !empty($terms);
+        }
+        if ($used) $this->clearAllCache();
+    }
     public function clearAllCache(): void {
-        // Unique tokens avoid lost-increment races between simultaneous edits.
-        update_option('scg_cache_gen', wp_generate_uuid4(), true);
+        // The new token applies to this request at once and is stored once, at shutdown,
+        // however many changes the request makes. Unique tokens avoid lost-increment races.
+        $this->gen = wp_generate_uuid4();
         $this->images = [];
+        if ($this->genScheduled) return;
+        $this->genScheduled = true;
+        if (did_action('shutdown')) $this->persistCacheGeneration();
+        else add_action('shutdown', [$this, 'persistCacheGeneration'], 0);
+    }
+    public function persistCacheGeneration(): void {
+        if (!$this->genScheduled) return;
+        $this->genScheduled = false;
+        update_option('scg_cache_gen', (string)$this->gen, true);
+        // Fires once per request after grid caches were invalidated; page-cache integrations can purge here.
+        do_action('scg_cache_cleared');
     }
     private function currentCategory(): int {
         if (is_category()) return absint(get_queried_object_id());
@@ -219,10 +276,12 @@ class SmartCategoriesGrid {
             'hide'=>filter_var($this->setting($a, 'hide_empty', false), FILTER_VALIDATE_BOOLEAN),
         ];
         $ttl = min(WEEK_IN_SECONDS, absint($s['cache_time'] ?? DAY_IN_SECONDS));
-        $bypass = !$ttl || filter_var($this->setting($a, 'force_update', false), FILTER_VALIDATE_BOOLEAN);
+        // force_update is a debugging aid: it is honoured only while WP_DEBUG is on.
+        $force = defined('WP_DEBUG') && WP_DEBUG && filter_var($this->setting($a, 'force_update', false), FILTER_VALIDATE_BOOLEAN);
+        $bypass = !$ttl || $force;
         // One stable key per configuration: the generation token is stored inside the entry,
         // so an invalidation overwrites the entry instead of leaving an orphaned transient.
-        $gen = (string)get_option('scg_cache_gen', '1');
+        $gen = $this->gen ?? (string)get_option('scg_cache_gen', '1');
         $key = 'scg_cache_' . md5(wp_json_encode([$v, self::VERSION, get_locale()]));
         $cached = $bypass ? false : get_transient($key);
         $html = is_array($cached) && isset($cached['html'], $cached['gen']) && $cached['gen'] === $gen ? (string)$cached['html'] : null;
@@ -230,7 +289,7 @@ class SmartCategoriesGrid {
             $html = $this->generate($v);
             if (!$bypass) set_transient($key, ['html'=>$html, 'gen'=>$gen], $ttl);
         }
-        return $html === '' ? '' : $this->styles() . $html;
+        return $html === '' ? '' : $this->styles($style) . $html;
     }
     private function generate(array $v): string {
         // Core's hierarchical query keeps empty parents with populated descendants;
@@ -415,6 +474,53 @@ class SmartCategoriesGrid {
         check_ajax_referer('scg-clear-cache','nonce');
         $this->clearAllCache(); $this->clearWidgetCache();
         wp_send_json_success(['message'=>__('Cache cleared successfully!', 'smart-cat-grid')]);
+    }
+    // Latest GitHub release. The answer is cached; a failed lookup is cached for a shorter time
+    // so an unreachable API cannot slow the dashboard down.
+    private function latestRelease(): ?array {
+        $cached = get_site_transient('scg_release');
+        if (is_array($cached)) return $cached ?: null;
+        $release = [];
+        $response = wp_remote_get('https://api.github.com/repos/' . self::REPO . '/releases/latest',
+            ['timeout'=>8, 'headers'=>['Accept'=>'application/vnd.github+json']]);
+        if (!is_wp_error($response) && (int)wp_remote_retrieve_response_code($response) === 200) {
+            $data = json_decode((string)wp_remote_retrieve_body($response), true);
+            $version = is_array($data) ? ltrim((string)($data['tag_name'] ?? ''), 'vV') : '';
+            if (preg_match('/^\d+\.\d+\.\d+$/', $version)) {
+                // Only the packaged plugin ZIP attached to this repository's release is accepted.
+                $prefix = 'https://github.com/' . self::REPO . '/releases/download/';
+                $name = self::SLUG . '-' . $version . '.zip';
+                foreach ((array)($data['assets'] ?? []) as $asset) {
+                    $url = is_array($asset) ? (string)($asset['browser_download_url'] ?? '') : '';
+                    if (strpos($url, $prefix) === 0 && substr($url, -strlen($name)) === $name) {
+                        $release = ['version'=>$version, 'package'=>$url, 'notes'=>(string)($data['body'] ?? ''),
+                            'url'=>'https://github.com/' . self::REPO . '/releases/tag/v' . $version];
+                        break;
+                    }
+                }
+            }
+        }
+        set_site_transient('scg_release', $release, $release ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS);
+        return $release ?: null;
+    }
+    public function checkForUpdate($update, $plugin_data, $plugin_file) {
+        // The release ZIP unpacks into the SLUG folder; offering it to a copy installed elsewhere
+        // would make WordPress treat the plugin as removed.
+        if ($plugin_file !== plugin_basename(__FILE__) || dirname($plugin_file) !== self::SLUG) return $update;
+        $release = $this->latestRelease();
+        if (!$release) return $update;
+        return ['id'=>'https://github.com/' . self::REPO, 'slug'=>self::SLUG, 'version'=>$release['version'],
+            'url'=>$release['url'], 'package'=>$release['package'], 'requires_php'=>'7.4'];
+    }
+    public function pluginInfo($result, $action, $args) {
+        if ($action !== 'plugin_information' || !is_object($args) || ($args->slug ?? '') !== self::SLUG) return $result;
+        $release = $this->latestRelease();
+        if (!$release) return $result;
+        $notes = $release['notes'] !== '' ? $release['notes'] : __('See the release page on GitHub.', 'smart-cat-grid');
+        return (object)['name'=>'Smart Categories Grid', 'slug'=>self::SLUG, 'version'=>$release['version'],
+            'author'=>'<a href="https://github.com/gemuzkm">TM</a>', 'homepage'=>'https://github.com/' . self::REPO,
+            'requires'=>'6.3', 'requires_php'=>'7.4', 'download_link'=>$release['package'],
+            'sections'=>['changelog'=>wpautop(esc_html($notes))]];
     }
 }
 SmartCategoriesGrid::getInstance();

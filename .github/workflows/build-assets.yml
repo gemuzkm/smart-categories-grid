@@ -1,14 +1,15 @@
 name: Build assets
 
-# Rebuilds assets/front.min.css with clean-css whenever assets/front.css changes
-# and commits the result back to main. A push made with GITHUB_TOKEN does not
-# start other workflows, so there is no loop.
+# Rebuilds assets/front.min.css and the per-style assets/front-<style>.min.css files with
+# clean-css whenever assets/front.css changes and commits the result back to main. A push
+# made with GITHUB_TOKEN does not start other workflows, so there is no loop.
 
 on:
   push:
     branches: [main]
     paths:
       - "assets/front.css"
+      - ".github/scripts/build-css.js"
       - ".github/workflows/build-assets.yml"
   workflow_dispatch:
 
@@ -43,14 +44,24 @@ jobs:
             || { echo "::error::aspect-ratio rule is missing from front.min.css"; exit 1; }
           ls -l assets/front.css assets/front.min.css
 
+      - name: Build per-style stylesheets
+        run: |
+          set -e
+          node .github/scripts/build-css.js "$RUNNER_TEMP/scg-css"
+          for style in classic modern minimal card text; do
+            npx --yes clean-css-cli@5 -O1 -o "assets/front-$style.min.css" "$RUNNER_TEMP/scg-css/front-$style.css"
+            test -s "assets/front-$style.min.css"
+          done
+          ls -l assets/front-*.min.css
+
       - name: Commit if changed
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add assets/front.min.css
+          git add assets/front.min.css assets/front-*.min.css
           if git diff --cached --quiet; then
-            echo "front.min.css is already up to date"
+            echo "Minified stylesheets are already up to date"
           else
             git commit -m "build: rebuild front.min.css"
             git push
