@@ -2,7 +2,7 @@
   "$schema": "https://schemas.wp.org/trunk/block.json",
   "apiVersion": 3,
   "name": "smart-cat-grid/categories-grid",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "title": "Categories Grid",
   "category": "widgets",
   "icon": "grid-view",
@@ -27,5 +27,5 @@
   },
   "example": {"attributes": {"type": "top-level", "limit": "6", "columns": "3"}},
   "editorScript": "scg-block-editor",
-  "style": "scg-front"
+  "editorStyle": "scg-front"
 }

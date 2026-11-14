@@ -1,19 +1,19 @@
 # Layout and performance verification
 
-This follow-up completes the CSS work deferred from the 2.4.0 changes. It does not claim a PageSpeed score or field Core Web Vitals result.
+This document describes the stylesheet shipped in 2.4.1. It does not claim a PageSpeed score or a field Core Web Vitals result.
 
-## Changes
+## Stylesheet
 
-- Scope box sizing to the grid. Padding and borders no longer add unexpected width or height to 100%-sized cards.
-- Allow grid tracks and long titles to shrink and wrap without horizontal overflow.
-- Give every image container a known size before the image arrives. Normal images use a 120:96 aspect ratio, Modern mobile images use the same ratio at a smaller width, and Card images retain fixed 140px/100px heights.
-- Keep images inside their reserved containers even when a theme sets `img { height: auto; max-width: 100%; }`.
-- Use static shadows. Only `transform` and `opacity` are eligible for transitions; no animated shadow, background, color or width.
-- Restrict hover motion to fine-pointer devices and honor reduced-motion preferences for descendants and pseudo-elements.
-- Give title and View All links at least 44px height. Fix the Text style selector so it targets the grid itself.
-- Reduce source CSS from 12,501 bytes to 5,868 bytes. The conservative minified copy is 4,610 bytes versus 9,054 bytes previously. The bot and release workflow regenerate it using clean-css; their exact output size may differ.
+- Box sizing is scoped to the grid, so padding and borders do not add unexpected width or height to 100%-sized cards.
+- Grid tracks can shrink and long titles wrap without horizontal overflow.
+- Every image container has a known size before the image arrives. Normal images use a 120:96 aspect ratio, Modern mobile images use the same ratio at a smaller width, and Card images keep fixed 140px/100px heights.
+- Images stay inside their reserved containers even when a theme sets `img { height: auto; max-width: 100%; }`.
+- The five styles follow the 2.3.2 look again: shadows, borders, the Modern accent bar and underline, the Card overlay, underline and arrow are restored. Hover transitions animate `transform` and `opacity` and also `box-shadow`, `border-color`, `background` and `color`; the transform/opacity-only restriction of the earlier 2.4.0 follow-up no longer applies.
+- Hover effects are limited to fine-pointer devices. Reduced-motion preferences disable transitions and animations for descendants and pseudo-elements.
+- Title and View All links are at least 44px high.
+- Source CSS is 11,932 bytes. The committed minified copy is 9,094 bytes; the Build assets and Release workflows regenerate it with clean-css, and their output size may differ.
 
-The five styles remain available, but spacing and hover presentation have intentionally been simplified. Card wrappers and PHP rendering are unchanged. This does not implement DOM flattening or a new PHP image-loading policy.
+Card wrappers and PHP rendering are unchanged. This does not implement DOM flattening or a new PHP image-loading policy.
 
 ## Executed checks
 
@@ -21,11 +21,11 @@ The Playwright/Chromium synthetic fixture checks all five styles at viewport wid
 
 The fixture deliberately delays image responses, then serves images with large intrinsic dimensions. It checks card/image/content geometry before and after arrival, layout-shift entries, horizontal overflow, title/button heights, responsive columns, touch hover and reduced-motion behavior. It also uses long unbroken titles and a theme-like image rule.
 
-In the local 80-case run, maximum image-related geometry change, observed layout-shift sum and horizontal overflow were zero; the smallest tested link height was 44px. This is an isolated static-markup fixture matching the renderer's card structure, not a WordPress/theme integration test and not a measurement of the live site's CLS.
+A local 80-case run against the 2.4.1 stylesheet passed every threshold: image-related geometry change below 0.5px, layout-shift sum below 0.001, no horizontal overflow and link heights of at least 44px. That run used a simple local minifier instead of clean-css. Hover effects were also checked once per style at 1280px with a mouse pointer. This is an isolated static-markup fixture matching the renderer's card structure, not a WordPress/theme integration test and not a measurement of a live site's CLS.
 
 ## Automated checks
 
-The Layout and Lighthouse checks workflow rebuilds production CSS and runs the fixture in Chromium on relevant pushes and pull requests. Its report is uploaded as an artifact. The existing Build assets workflow continues committing clean-css output to main; Release rebuilds it again before packaging.
+The Layout and Lighthouse checks workflow rebuilds production CSS and runs the fixture in Chromium on relevant pushes and pull requests. Its report is uploaded as an artifact. The layout job runs on a pinned ubuntu-24.04 image with Python 3.12; its first successful run on GitHub was on the 2.4.1 pull request. The existing Build assets workflow continues committing clean-css output to main; Release rebuilds it again before packaging.
 
 To run the same fixture locally, install Playwright 1.51.0 and its Chromium browser, then run `python .github/tests/layout.py`.
 
@@ -35,4 +35,4 @@ Use Actions → Layout and Lighthouse checks → Run workflow and provide a publ
 
 Lighthouse reports laboratory LCP, CLS and TBT. TBT is diagnostic, not a replacement for field INP. Compare repeated runs under the same conditions, and use Search Console/CrUX or RUM for real-user INP and other field results. Theme scripts, fonts, page caches, images outside the grid, consent widgets, ads and the hosting environment can all affect the score.
 
-Before publishing a release, review the five styles on a WordPress staging site, test keyboard navigation and measure pages with and without the grid. If updating an existing 2.4.0 installation directly from main, purge its page/CDN/browser asset caches: these CSS changes do not alter the PHP asset-version constant. No new release tag is created by this follow-up.
+Before publishing a release, review the five styles on a WordPress staging site, test keyboard navigation and measure pages with and without the grid. From 2.4.1 asset URLs include the file modification time, so a replaced stylesheet gets a new URL. Full-page and CDN caches that still serve older HTML need a purge.
