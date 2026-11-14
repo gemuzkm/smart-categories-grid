@@ -3,7 +3,7 @@
 Plugin Name: Smart Categories Grid
 Plugin URI: https://github.com/gemuzkm/smart-categories-grid
 Description: Responsive category navigation for WordPress. Includes a block and shortcode, server-side caching, category images, display controls and five visual styles.
-Version: 2.4.0
+Version: 2.4.1
 Author: TM
 Author URI: https://github.com/gemuzkm
 Text Domain: smart-cat-grid
@@ -19,7 +19,7 @@ defined('ABSPATH') || exit;
 register_activation_hook(__FILE__, ['SmartCategoriesGrid', 'onActivationStatic']);
 
 class SmartCategoriesGrid {
-    private const VERSION = '2.4.0';
+    private const VERSION = '2.4.1';
     private const BLOCK = 'smart-cat-grid/categories-grid';
     private const FLAG = 'scg_widget_flag';
     private array $settings = [];

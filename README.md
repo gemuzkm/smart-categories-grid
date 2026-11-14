@@ -12,7 +12,7 @@ WordPress 6.3+, PHP 7.4+. Compatibility metadata remains at WordPress 7.1; no ne
 - Responsive columns, category selection, automatic context detection and exclusions.
 - Optional category images, default images and high-density thumbnail candidates.
 - Optional category limits, View All navigation and empty-archive filtering.
-- Transient-based HTML caching with unique generation tokens.
+- Transient-based HTML caching with one stable entry per grid configuration.
 - No plugin JavaScript enqueued for visitor-facing grids.
 
 ## Installation and usage
@@ -35,9 +35,9 @@ Category images use an attachment ID stored in term meta `logo`. Fallback order:
 
 ## Performance and integration
 
-Term metadata and attachments for displayed categories are primed in batches. The widget-detection flag is autoloaded; startup no longer reads asset modification times. These changes reduce overhead but do not guarantee zero cost or a specific query count.
+Term metadata and attachments for displayed categories are primed in batches. The widget-detection flag is autoloaded. Asset URLs include the file modification time, which costs one file-stat call per request for the front-end stylesheet. These changes reduce overhead but do not guarantee zero cost or a specific query count.
 
-Images reserve dimensions. First-row images are not explicitly marked lazy; later images use native lazy loading. WordPress and optimization plugins may further process images. CSS is eligible for WordPress-managed inlining; late renders retain the stylesheet-link fallback. Themes, CSP and delayed-CSS tools may affect the result. Verify CLS, LCP and visual appearance on representative site pages.
+Images reserve dimensions. First-row images are not explicitly marked lazy; later images use native lazy loading. WordPress and optimization plugins may further process images. The stylesheet is requested only by pages that render a grid; the block registers it as an editor style. CSS is eligible for WordPress-managed inlining; late renders retain the stylesheet-link fallback. Themes, CSP and delayed-CSS tools may affect the result. Verify CLS, LCP and visual appearance on representative site pages.
 
 Filters: `scg_has_shortcode`, `scg_placeholder_image`, `scg_inline_styles`, `scg_print_late_styles`. The core `wp_lazy_loading_enabled` filter is consulted with context `scg_grid`; clear grid caches after changing rendering filters.
 
@@ -45,7 +45,7 @@ Existing card wrappers and class names are retained. Images are clickable; the t
 
 ## Development and verification
 
-Edit `assets/front.css`, not `front.min.css`. The existing Build assets workflow rebuilds and commits the minified stylesheet. Release packaging rebuilds it again. Enable SCRIPT_DEBUG in development and increment the version when shipping asset changes.
+Edit `assets/front.css`, not `front.min.css`. The existing Build assets workflow rebuilds and commits the minified stylesheet. Release packaging rebuilds it again. Enable SCRIPT_DEBUG in development. Asset URLs change automatically when a file is replaced.
 
 The PHP header, class constant and block metadata versions must match. Release notes use the matching changelog heading. Create a `vX.Y.Z` tag only after CI and site acceptance checks pass.
 
@@ -56,6 +56,14 @@ The regression workflow runs PHP syntax checks and isolated renderer/cache fixtu
 Uninstall removes plugin options and database-backed transients, including on multisite, without flushing the shared object cache. Persistent-cache entries that cannot be enumerated expire by TTL (at most one week for new entries).
 
 ## Changelog
+
+### Version 2.4.1
+- Fix a block with parent "Default (from settings)" rendering nothing; it inherits the default category again.
+- Restore the 2.3.2 look of the five styles; keep reserved image space and 44 px link targets. Hover effects apply to pointer devices only.
+- Restore image alt text, block field hints, the empty-result placeholder, and the settings page sections, descriptions and usage help.
+- Use one stable cache entry per grid configuration; invalidation overwrites it instead of adding a transient.
+- Add the file modification time to asset URLs.
+- Register the stylesheet as a block editor style; front-end pages request it only when a grid is rendered.
 
 ### Version 2.4.0
 - Added `hide_empty` / `hideEmpty` using WordPress hierarchical term queries.
