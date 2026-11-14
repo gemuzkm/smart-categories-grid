@@ -2,9 +2,9 @@
 # This file is distributed under the GPL v2 or later.
 msgid ""
 msgstr ""
-"Project-Id-Version: Smart Categories Grid 2.4.1\n"
+"Project-Id-Version: Smart Categories Grid 2.5.0\n"
 "Report-Msgid-Bugs-To: https://github.com/gemuzkm/smart-categories-grid/issues\n"
-"POT-Creation-Date: 2026-11-14 05:30+0000\n"
+"POT-Creation-Date: 2026-11-14 07:59+0000\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
@@ -221,12 +221,24 @@ msgstr ""
 msgid "Cache cleared successfully!"
 msgstr ""
 
+#: smart-categories-grid.php
+msgid "See the release page on GitHub."
+msgstr ""
+
 #: block/index.js
 msgid "Default (from settings)"
 msgstr ""
 
 #: block/index.js
 msgid "No categories found for the selected source."
+msgstr ""
+
+#: block/index.js
+msgid "Parent category"
+msgstr ""
+
+#: block/index.js
+msgid "Type to search. Leave empty to use the default category from settings."
 msgstr ""
 
 #: block/index.js
@@ -251,10 +263,6 @@ msgstr ""
 
 #: block/index.js
 msgid "Top-level categories"
-msgstr ""
-
-#: block/index.js
-msgid "Parent category"
 msgstr ""
 
 #: block/index.js
@@ -326,7 +334,11 @@ msgid "Image border radius (px)"
 msgstr ""
 
 #: block/index.js
-msgid "Button color (hex)"
+msgid "Button color"
+msgstr ""
+
+#: block/index.js
+msgid "Clear the color to use the default from settings."
 msgstr ""
 
 #: block/block.json

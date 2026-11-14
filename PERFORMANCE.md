@@ -1,38 +1,44 @@
 # Layout and performance verification
 
-This document describes the stylesheet shipped in 2.4.1. It does not claim a PageSpeed score or a field Core Web Vitals result.
+This document describes the changes prepared for 2.5.0. It is not a certification of WordPress, Redis or page-cache compatibility and does not claim a PageSpeed score or a live-site Core Web Vitals result.
 
-## Stylesheet
+## Stylesheets and rendering
 
-- Box sizing is scoped to the grid, so padding and borders do not add unexpected width or height to 100%-sized cards.
-- Grid tracks can shrink and long titles wrap without horizontal overflow.
-- Every image container has a known size before the image arrives. Normal images use a 120:96 aspect ratio, Modern mobile images use the same ratio at a smaller width, and Card images keep fixed 140px/100px heights.
-- Images stay inside their reserved containers even when a theme sets `img { height: auto; max-width: 100%; }`.
-- The five styles follow the 2.3.2 look again: shadows, borders, the Modern accent bar and underline, the Card overlay, underline and arrow are restored. Hover transitions animate `transform` and `opacity` and also `box-shadow`, `border-color`, `background` and `color`; the transform/opacity-only restriction of the earlier 2.4.0 follow-up no longer applies.
-- Hover effects are limited to fine-pointer devices. Reduced-motion preferences disable transitions and animations for descendants and pseudo-elements.
-- On touch screens (`pointer: coarse`) title and View All links are at least 44px high. On pointer devices they keep their text height, as in 2.3.2.
-- Source CSS is 12,233 bytes. The Build assets and Release workflows generate the minified copy with clean-css.
+- `assets/front.css` remains the single source. `.github/scripts/build-css.js` extracts shared rules and the rules of one style into five stylesheets; workflows minify them with clean-css.
+- Front-end grids select `assets/front-<style>.min.css`. The full `front.min.css` remains the fallback if that file is absent. With `SCRIPT_DEBUG`, grids use the full source. The editor registers the full stylesheet so changing styles remains possible.
+- The feature branch does not contain the generated per-style files. CI builds them for layout tests; Release builds them into the ZIP; Build assets commits them to main after the merge. Installing the unbuilt branch therefore uses the full-file fallback.
+- Early grid detection requests the saved default style. A grid overriding that style can also request its own stylesheet, so a page can load more than one file. Multiple styles duplicate shared rules; no universal reduction in request count is claimed.
+- Stylesheets opt into WordPress-managed inlining through path data. A grid rendered after the head retains the stylesheet-link fallback. Delivery in a category template, a block-editor preview and CSS-optimization plugins has not been verified on a live site.
+- Image containers reserve their geometry before images load, including Card's fixed heights. Text style renders no images. No visitor-facing plugin JavaScript is enqueued.
+- Hover effects require a fine pointer with hover support. They include shadow, background, border-color and color transitions, not only transform and opacity. Reduced-motion preferences disable transitions and animations. The 44px minimum link height applies under `pointer: coarse`, not on every device.
 
-Card wrappers and PHP rendering are unchanged. This does not implement DOM flattening or a new PHP image-loading policy.
+A development comparison using a simple local minifier produced 9,272 bytes for the full stylesheet and 4,127 bytes for Text. These are uncompressed development outputs, not measured clean-css release sizes, compressed transfer sizes or evidence of faster LCP. Measure the final package and deployed page before claiming a speed improvement.
 
-## Executed checks
+## Cache behaviour and limitations
 
-The Playwright/Chromium synthetic fixture checks all five styles at viewport widths 320, 375, 768 and 1280px, configured columns 2 and 6, using both source and minified CSS: 80 cases.
+- Each grid configuration, plugin version and locale has a stable transient key. The generation token is stored in the entry, so invalidation does not create a new key for each edit. New configurations and plugin versions still create separate entries.
+- The 2.5.0 implementation changes the in-request token immediately and batches persistence until shutdown. Attachment edits and deletions check whether the attachment is a default image or category logo before invalidating grids. This reduces write opportunities by design; database and Redis latency have not been benchmarked.
+- `scg_cache_cleared` is an integration hook, not a built-in page-cache purge. Without an integration, existing cached pages can continue to contain older grid HTML. Do not flush the site's shared object cache.
+- `force_update` bypasses grid caching only with `WP_DEBUG` enabled; setting cache duration to zero disables grid cache reads and writes independently.
+- The release lookup has a separate site-transient cache: six hours for a usable release, one hour for a failed lookup. A cache-miss lookup can wait for its HTTP timeout; caching does not eliminate that first-request delay. Installation of an update has not been tested in WordPress.
+- Uninstall targets this plugin's options and database grid-transient rows without a shared-cache flush. External-cache entries expire by TTL. Actual uninstall behaviour with Redis and multisite remains untested.
 
-The fixture deliberately delays image responses, then serves images with large intrinsic dimensions. It checks card/image/content geometry before and after arrival, layout-shift entries, horizontal overflow, title/button heights on touch contexts, responsive columns, touch hover and reduced-motion behavior. It also uses long unbroken titles and a theme-like image rule.
+## Verification performed
 
-Local runs against the 2.4.1 stylesheet passed every threshold: image-related geometry change below 0.5px, layout-shift sum below 0.001, no horizontal overflow and, on touch contexts, link heights of at least 44px. Those runs used a simple local minifier instead of clean-css; the full 80-case matrix with clean-css output runs in the layout job. Hover effects were also checked once per style at 1280px with a mouse pointer. This is an isolated static-markup fixture matching the renderer's card structure, not a WordPress/theme integration test and not a measurement of a live site's CLS.
+The Chromium fixture covers five styles, four widths (320, 375, 768 and 1280px), two column settings (2 and 6), and two stylesheet modes: 80 cases. Source cases load the full source; minified cases load the per-style file rebuilt with clean-css. Touch contexts are emulated only at widths below 768px; wide touchscreens, hybrid devices and narrow mouse contexts are not covered.
 
-## Automated checks
+The fixture checks geometry before and after delayed image loading, layout-shift entries, horizontal overflow, responsive columns, 44px link heights in touch contexts, touch hover and reduced-motion transition duration. Passing thresholds are geometry change below 0.5px, layout-shift sum below 0.001 and horizontal overflow at most 1px. These are synthetic thresholds, not measured live-site CLS.
 
-The Layout and Lighthouse checks workflow rebuilds production CSS and runs the fixture in Chromium on relevant pushes and pull requests. Its report is uploaded as an artifact. The layout job runs on a pinned ubuntu-24.04 image with Python 3.12; its first successful run on GitHub was on the 2.4.1 pull request. The existing Build assets workflow continues committing clean-css output to main; Release rebuilds it again before packaging.
+On commit `66a9c4752f73767404033a2cc555daa015bf26bd`, all ten non-Lighthouse PR checks completed successfully: PHP syntax on 7.4 and 8.0-8.4, isolated renderer/cache fixtures on 7.4 and 8.3, version consistency, and layout. The layout run is https://github.com/gemuzkm/smart-categories-grid/actions/runs/43573441435 . This records that commit only; subsequent changes need their own checks. Lighthouse was skipped.
 
-To run the same fixture locally, install Playwright 1.51.0 and its Chromium browser, then run `python .github/tests/layout.py`.
+PHP fixtures replace WordPress functions with stubs. They do not verify actual database queries, persistent Redis behaviour, concurrent requests, shutdown ordering, block editor components, update installation or uninstall. Plugin Check has not been run. PHP autoformatting was removed by choice; this is not a claim of full coding-standard compliance.
 
-## Live-site LCP, INP and PageSpeed
+## Checks before release
 
-Use Actions → Layout and Lighthouse checks → Run workflow and provide a public HTTPS page containing the grid. The optional mobile Lighthouse job uploads HTML and JSON reports for performance, accessibility, best practices and SEO. It audits the supplied deployed URL, not the unpublished Git commit. Do not put credentials or private tokens in the URL.
+1. Build the installation ZIP, verify its root folder and version, and confirm all five generated stylesheets are included.
+2. On staging, render the category-template shortcode on two different category archives in Text mode. Check correct subcategories, cold and warm caches, and invalidation after category changes with Redis enabled and disabled.
+3. Test the actual page-cache plugin: purge affected archive pages through a targeted integration, then verify the new HTML. Test stylesheet delivery with the site's minification, deferred-CSS and unused-CSS settings.
+4. Test editor search, the saved parent, colour selection/reset, settings saving, keyboard focus and mobile/desktop appearance. Test GitHub update installation and uninstall on a disposable site.
+5. Measure repeated cold/warm page loads on a public representative URL. Lighthouse supplies laboratory LCP, CLS and TBT; TBT is not field INP. Use field data or RUM for INP. The whole theme, fonts, hosting and other plugins affect the results.
 
-Lighthouse reports laboratory LCP, CLS and TBT. TBT is diagnostic, not a replacement for field INP. Compare repeated runs under the same conditions, and use Search Console/CrUX or RUM for real-user INP and other field results. Theme scripts, fonts, page caches, images outside the grid, consent widgets, ads and the hosting environment can all affect the score.
-
-Before publishing a release, review the five styles on a WordPress staging site, test keyboard navigation and measure pages with and without the grid. From 2.4.1 asset URLs include the file modification time, so a replaced stylesheet gets a new URL. Full-page and CDN caches that still serve older HTML need a purge.
+The optional Lighthouse workflow audits the deployed URL, not unpublished branch code. Do not include credentials or private tokens. Full-page/CDN caches serving older HTML may need a targeted purge after installation even though asset URLs include the plugin version and file modification time.
