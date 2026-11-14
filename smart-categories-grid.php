@@ -322,48 +322,74 @@ class SmartCategoriesGrid {
     }
     public function settingsPage(): void {
         if (!current_user_can('manage_options')) return;
-        echo '<div class="wrap scg-settings-wrap"><h1>' . esc_html__('Categories Grid Settings', 'smart-cat-grid') . '</h1><form method="post" action="options.php">';
-        settings_fields('scg_settings_group');
-        $fields = [
-            'default_category'=>__('Default Category', 'smart-cat-grid'),
-            'exclude_categories'=>__('Exclude Categories', 'smart-cat-grid'),
-            'cache_time'=>__('Cache Duration', 'smart-cat-grid'),
-            'default_limit'=>__('Default Category Limit', 'smart-cat-grid'),
-            'view_all_url'=>__('View All URL', 'smart-cat-grid'),
-            'columns'=>__('Default Columns', 'smart-cat-grid'),
-            'image_radius'=>__('Image Border Radius', 'smart-cat-grid'),
-            'hover_effect'=>__('Hover Effect', 'smart-cat-grid'),
-            'default_image'=>__('Default Image', 'smart-cat-grid'),
-            'default_show_images'=>__('Show Images by Default', 'smart-cat-grid'),
-            'button_color'=>__('Button Color', 'smart-cat-grid'),
-            'grid_style'=>__('Grid Style', 'smart-cat-grid')];
-        $defaults = ['columns'=>6,'image_radius'=>3,'cache_time'=>DAY_IN_SECONDS,'button_color'=>'#b93434','grid_style'=>'classic'];
-        echo '<table class="form-table">';
-        foreach ($fields as $key=>$label) {
-            $value = $this->settings[$key] ?? $defaults[$key] ?? '';
-            $name = 'scg_settings[' . $key . ']';
-            echo '<tr><th scope="row"><label for="scg-' . esc_attr($key) . '">' . esc_html($label) . '</label></th><td>';
-            if ($key === 'default_category') {
-                wp_dropdown_categories(['id'=>'scg-default_category','name'=>$name,'selected'=>$value,'hierarchical'=>true,'hide_empty'=>false,'show_option_none'=>__('Select a category', 'smart-cat-grid'),'option_none_value'=>0]);
-            } elseif (in_array($key, ['hover_effect','default_show_images'], true)) {
-                echo '<input id="scg-' . esc_attr($key) . '" type="checkbox" name="' . esc_attr($name) . '" value="1" ' . checked(!empty($value), true, false) . '>';
-            } elseif ($key === 'grid_style' || $key === 'cache_time' || $key === 'columns') {
-                $options = $key === 'grid_style' ? ['classic'=>__('Classic', 'smart-cat-grid'),'modern'=>__('Modern', 'smart-cat-grid'),'minimal'=>__('Minimal', 'smart-cat-grid'),'card'=>__('Card', 'smart-cat-grid'),'text'=>__('Text Only', 'smart-cat-grid')]
-                    : ($key === 'columns' ? [2=>2,3=>3,4=>4,5=>5,6=>6] : [0=>__('No Caching', 'smart-cat-grid'),3600=>__('1 Hour', 'smart-cat-grid'),43200=>__('12 Hours', 'smart-cat-grid'),86400=>__('1 Day', 'smart-cat-grid'),604800=>__('1 Week', 'smart-cat-grid')]);
-                echo '<select id="scg-' . esc_attr($key) . '" name="' . esc_attr($name) . '">';
-                foreach ($options as $v=>$text) echo '<option value="' . esc_attr($v) . '" ' . selected($value, $v, false) . '>' . esc_html($text) . '</option>';
-                echo '</select>';
-                if ($key === 'cache_time') echo ' <button type="button" id="scg-clear-cache" class="button">' . esc_html__('Clear Cache', 'smart-cat-grid') . '</button>';
-            } else {
-                $type = in_array($key, ['view_all_url','default_image'], true) ? 'url' : (in_array($key, ['image_radius','default_limit'], true) ? 'number' : 'text');
-                echo '<input id="scg-' . esc_attr($key) . '" type="' . esc_attr($type) . '" min="0" ' . ($key === 'image_radius' ? 'max="50" ' : '') . 'name="' . esc_attr($name) . '" value="' . esc_attr($value) . '" class="' . ($key === 'button_color' ? 'scg-color-picker' : 'regular-text') . '">';
-                if ($key === 'default_image') echo ' <button type="button" class="button scg-upload-image">' . esc_html__('Select Image', 'smart-cat-grid') . '</button>';
-            }
-            echo '</td></tr>';
+        echo '<div class="wrap scg-settings-wrap"><h1>' . esc_html__('Categories Grid Settings', 'smart-cat-grid') . '</h1>';
+        if (get_option('scg_show_regenerate_notice')) {
+            delete_option('scg_show_regenerate_notice');
+            echo '<div class="notice notice-info is-dismissible"><p>' . esc_html__('Plugin activated! For best image quality, please regenerate thumbnails using a plugin like "Regenerate Thumbnails".', 'smart-cat-grid') . '</p></div>';
         }
-        echo '</table>';
+        echo '<form method="post" action="options.php">';
+        settings_fields('scg_settings_group');
+        $sections = [
+            __('General Settings', 'smart-cat-grid') => [
+                'default_category'=>__('Default Category', 'smart-cat-grid'),
+                'exclude_categories'=>__('Exclude Categories', 'smart-cat-grid'),
+                'cache_time'=>__('Cache Duration', 'smart-cat-grid'),
+                'default_limit'=>__('Default Category Limit', 'smart-cat-grid'),
+                'view_all_url'=>__('View All URL', 'smart-cat-grid')],
+            __('Display Settings', 'smart-cat-grid') => [
+                'columns'=>__('Default Columns', 'smart-cat-grid'),
+                'image_radius'=>__('Image Border Radius', 'smart-cat-grid'),
+                'hover_effect'=>__('Hover Effect', 'smart-cat-grid'),
+                'default_image'=>__('Default Image', 'smart-cat-grid'),
+                'default_show_images'=>__('Show Images by Default', 'smart-cat-grid'),
+                'button_color'=>__('Button Color', 'smart-cat-grid'),
+                'grid_style'=>__('Grid Style', 'smart-cat-grid')]];
+        $help = [
+            'exclude_categories'=>__('Comma-separated category IDs to exclude (e.g., 10,20,30).', 'smart-cat-grid'),
+            'default_limit'=>__('Default number of categories to display. 0 = no limit.', 'smart-cat-grid'),
+            'view_all_url'=>__('URL for the "View All" button for top-level categories. Leave empty to hide.', 'smart-cat-grid'),
+            'default_show_images'=>__('If checked, images will be shown unless overridden by the shortcode.', 'smart-cat-grid'),
+            'button_color'=>__('Color for the "View All" button.', 'smart-cat-grid'),
+            'grid_style'=>__('Visual style for the category grid.', 'smart-cat-grid')];
+        $checkboxes = [
+            'hover_effect'=>__('Enable hover effects', 'smart-cat-grid'),
+            'default_show_images'=>__('Show images by default', 'smart-cat-grid')];
+        $defaults = ['columns'=>6,'image_radius'=>3,'cache_time'=>DAY_IN_SECONDS,'button_color'=>'#b93434','grid_style'=>'classic'];
+        foreach ($sections as $title=>$fields) {
+            echo '<h2>' . esc_html($title) . '</h2><table class="form-table" role="presentation">';
+            foreach ($fields as $key=>$label) {
+                $value = $this->settings[$key] ?? $defaults[$key] ?? '';
+                $name = 'scg_settings[' . $key . ']';
+                echo '<tr><th scope="row"><label for="scg-' . esc_attr($key) . '">' . esc_html($label) . '</label></th><td>';
+                if ($key === 'default_category') {
+                    wp_dropdown_categories(['id'=>'scg-default_category','name'=>$name,'selected'=>$value,'hierarchical'=>true,'hide_empty'=>false,'show_option_none'=>__('Select a category', 'smart-cat-grid'),'option_none_value'=>0]);
+                } elseif (isset($checkboxes[$key])) {
+                    echo '<label><input id="scg-' . esc_attr($key) . '" type="checkbox" name="' . esc_attr($name) . '" value="1" ' . checked(!empty($value), true, false) . '> ' . esc_html($checkboxes[$key]) . '</label>';
+                } elseif ($key === 'grid_style' || $key === 'cache_time' || $key === 'columns') {
+                    $options = $key === 'grid_style' ? ['classic'=>__('Classic', 'smart-cat-grid'),'modern'=>__('Modern', 'smart-cat-grid'),'minimal'=>__('Minimal', 'smart-cat-grid'),'card'=>__('Card', 'smart-cat-grid'),'text'=>__('Text Only', 'smart-cat-grid')]
+                        : ($key === 'columns' ? [2=>2,3=>3,4=>4,5=>5,6=>6] : [0=>__('No Caching', 'smart-cat-grid'),3600=>__('1 Hour', 'smart-cat-grid'),43200=>__('12 Hours', 'smart-cat-grid'),86400=>__('1 Day', 'smart-cat-grid'),604800=>__('1 Week', 'smart-cat-grid')]);
+                    echo '<select id="scg-' . esc_attr($key) . '" name="' . esc_attr($name) . '">';
+                    foreach ($options as $v=>$text) echo '<option value="' . esc_attr($v) . '" ' . selected($value, $v, false) . '>' . esc_html($text) . '</option>';
+                    echo '</select>';
+                    if ($key === 'cache_time') echo ' <button type="button" id="scg-clear-cache" class="button">' . esc_html__('Clear Cache', 'smart-cat-grid') . '</button>';
+                } else {
+                    $type = in_array($key, ['view_all_url','default_image'], true) ? 'url' : (in_array($key, ['image_radius','default_limit'], true) ? 'number' : 'text');
+                    echo '<input id="scg-' . esc_attr($key) . '" type="' . esc_attr($type) . '" min="0" ' . ($key === 'image_radius' ? 'max="50" ' : '') . 'name="' . esc_attr($name) . '" value="' . esc_attr($value) . '" class="' . ($key === 'button_color' ? 'scg-color-picker' : 'regular-text') . '">';
+                    if ($key === 'default_image') echo ' <button type="button" class="button scg-upload-image">' . esc_html__('Select Image', 'smart-cat-grid') . '</button>';
+                }
+                if (isset($help[$key])) echo '<p class="description">' . esc_html($help[$key]) . '</p>';
+                echo '</td></tr>';
+            }
+            echo '</table>';
+        }
         submit_button();
-        echo '</form><p>' . esc_html__('Use the Categories Grid block or the [categories_grid] shortcode. Regenerate thumbnails after updating image sizes.', 'smart-cat-grid') . '</p></div>';
+        echo '</form>';
+        echo '<h2>' . esc_html__('Image Size Information', 'smart-cat-grid') . '</h2>';
+        echo '<p>' . esc_html__('This plugin registers two image sizes: 120x96 (1x) and 240x192 (2x for Retina displays). New uploads are resized automatically.', 'smart-cat-grid') . '</p>';
+        echo '<p>' . esc_html__('For existing images, regenerate thumbnails using a plugin like "Regenerate Thumbnails".', 'smart-cat-grid') . '</p>';
+        echo '<h2>' . esc_html__('Usage', 'smart-cat-grid') . '</h2>';
+        echo '<p>' . esc_html__('Block editor: add the "Categories Grid" block and configure it in the sidebar.', 'smart-cat-grid') . '</p>';
+        echo '<p>' . esc_html__('Shortcodes: [categories_grid type="top-level"], [categories_grid category_id="X"], [categories_grid auto="true" limit="200"]. Use exclude="X,Y", show_images="false", limit="N", hide_empty="true", show_view_all="false" as needed.', 'smart-cat-grid') . '</p></div>';
     }
     public function adminAssets(string $hook): void {
         if ($hook !== 'settings_page_scg-settings') return;
