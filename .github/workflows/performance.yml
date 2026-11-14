@@ -24,10 +24,14 @@ permissions:
   contents: read
 jobs:
   layout:
-    runs-on: ubuntu-latest
+    # Pinned image and Python: Playwright 1.51.0 ships browser dependencies for specific OS releases.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Rebuild production CSS
         run: npx --yes clean-css-cli@5 -O1 -o assets/front.min.css assets/front.css
       - name: Install isolated browser test environment
