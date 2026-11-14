@@ -1,11 +1,19 @@
 <?php
 // Isolated renderer fixtures, not a WordPress integration environment.
 define('ABSPATH', __DIR__);
-define('DAY_IN_SECONDS',86400); define('WEEK_IN_SECONDS',604800);
+define('HOUR_IN_SECONDS',3600); define('DAY_IN_SECONDS',86400); define('WEEK_IN_SECONDS',604800);
 $GLOBALS['options']=['scg_settings'=>['cache_time'=>86400]];
 $GLOBALS['transients']=[]; $GLOBALS['queries']=[]; $GLOBALS['head']=false;
 $GLOBALS['actions']=[]; $GLOBALS['updates']=0;
+$GLOBALS['site_transients']=[]; $GLOBALS['http']=null; $GLOBALS['http_calls']=0;
 function add_action(...$a) {} function register_activation_hook(...$a) {} function add_shortcode(...$a) {}
+function add_filter(...$a) {}
+function plugin_basename($f) {return 'smart-categories-grid/smart-categories-grid.php';}
+function get_site_transient($k) {return $GLOBALS['site_transients'][$k] ?? false;}
+function set_site_transient($k,$v,$t) {$GLOBALS['site_transients'][$k]=$v;}
+function wp_remote_get($u,$a=[]) {$GLOBALS['http_calls']++;return $GLOBALS['http'];}
+function wp_remote_retrieve_response_code($r) {return $r['code'];}
+function wp_remote_retrieve_body($r) {return $r['body'];}
 function did_action($h) {return 0;}
 function do_action($h,...$a) {$GLOBALS['actions'][]=$h;}
 function get_option($k,$d=false) {return $GLOBALS['options'][$k] ?? $d;}
@@ -69,5 +77,16 @@ check($GLOBALS['actions']===[],'unrelated attachment edits do not invalidate gri
 $GLOBALS['empty']=false;
 $p->onAttachmentChange(77);$p->persistCacheGeneration();
 check($GLOBALS['actions']===['scg_cache_cleared'],'category image edits invalidate grids');
+$f='smart-categories-grid/smart-categories-grid.php';
+$z='https://github.com/gemuzkm/smart-categories-grid/releases/download/v2.9.0/smart-categories-grid-2.9.0.zip';
+$GLOBALS['http']=['code'=>200,'body'=>json_encode(['tag_name'=>'v2.9.0','body'=>'Notes','assets'=>[['browser_download_url'=>$z.'.sha256'],['browser_download_url'=>$z]]])];
+$u=$p->checkForUpdate(false,[],$f);
+check(is_array($u) && $u['version']==='2.9.0' && $u['package']===$z,'update offer uses the packaged release ZIP');
+$p->checkForUpdate(false,[],$f);
+check($GLOBALS['http_calls']===1,'release lookup is cached');
+check($p->checkForUpdate(false,[],'other/other.php')===false,'other plugins are left alone');
+$GLOBALS['site_transients']=[];
+$GLOBALS['http']=['code'=>200,'body'=>json_encode(['tag_name'=>'v2.9.0','assets'=>[['browser_download_url'=>'https://example.com/smart-categories-grid-2.9.0.zip']]])];
+check($p->checkForUpdate(false,[],$f)===false,'packages outside the repository releases are rejected');
 $GLOBALS['empty']=true;check($p->renderGrid($a)==='','empty result');
 echo "Renderer/cache fixtures passed\n";

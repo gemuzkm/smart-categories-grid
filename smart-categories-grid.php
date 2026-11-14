@@ -22,6 +22,8 @@ class SmartCategoriesGrid {
     private const VERSION = '2.4.1';
     private const BLOCK = 'smart-cat-grid/categories-grid';
     private const FLAG = 'scg_widget_flag';
+    private const REPO = 'gemuzkm/smart-categories-grid';
+    private const SLUG = 'smart-categories-grid';
     private array $settings = [];
     private array $images = [];
     private ?string $placeholder = null;
@@ -63,6 +65,9 @@ class SmartCategoriesGrid {
         }
         add_action('edit_attachment', [$this, 'onAttachmentChange']);
         add_action('delete_attachment', [$this, 'onAttachmentChange']);
+        // The Update URI header points to github.com, so WordPress asks this filter for updates.
+        add_filter('update_plugins_github.com', [$this, 'checkForUpdate'], 10, 3);
+        add_filter('plugins_api', [$this, 'pluginInfo'], 10, 3);
     }
     public function addImageSizes(): void {
         add_image_size('scg-thumb', 120, 96, true);
@@ -441,6 +446,53 @@ class SmartCategoriesGrid {
         check_ajax_referer('scg-clear-cache','nonce');
         $this->clearAllCache(); $this->clearWidgetCache();
         wp_send_json_success(['message'=>__('Cache cleared successfully!', 'smart-cat-grid')]);
+    }
+    // Latest GitHub release. The answer is cached; a failed lookup is cached for a shorter time
+    // so an unreachable API cannot slow the dashboard down.
+    private function latestRelease(): ?array {
+        $cached = get_site_transient('scg_release');
+        if (is_array($cached)) return $cached ?: null;
+        $release = [];
+        $response = wp_remote_get('https://api.github.com/repos/' . self::REPO . '/releases/latest',
+            ['timeout'=>8, 'headers'=>['Accept'=>'application/vnd.github+json']]);
+        if (!is_wp_error($response) && (int)wp_remote_retrieve_response_code($response) === 200) {
+            $data = json_decode((string)wp_remote_retrieve_body($response), true);
+            $version = is_array($data) ? ltrim((string)($data['tag_name'] ?? ''), 'vV') : '';
+            if (preg_match('/^\d+\.\d+\.\d+$/', $version)) {
+                // Only the packaged plugin ZIP attached to this repository's release is accepted.
+                $prefix = 'https://github.com/' . self::REPO . '/releases/download/';
+                $name = self::SLUG . '-' . $version . '.zip';
+                foreach ((array)($data['assets'] ?? []) as $asset) {
+                    $url = is_array($asset) ? (string)($asset['browser_download_url'] ?? '') : '';
+                    if (strpos($url, $prefix) === 0 && substr($url, -strlen($name)) === $name) {
+                        $release = ['version'=>$version, 'package'=>$url, 'notes'=>(string)($data['body'] ?? ''),
+                            'url'=>'https://github.com/' . self::REPO . '/releases/tag/v' . $version];
+                        break;
+                    }
+                }
+            }
+        }
+        set_site_transient('scg_release', $release, $release ? 6 * HOUR_IN_SECONDS : HOUR_IN_SECONDS);
+        return $release ?: null;
+    }
+    public function checkForUpdate($update, $plugin_data, $plugin_file) {
+        // The release ZIP unpacks into the SLUG folder; offering it to a copy installed elsewhere
+        // would make WordPress treat the plugin as removed.
+        if ($plugin_file !== plugin_basename(__FILE__) || dirname($plugin_file) !== self::SLUG) return $update;
+        $release = $this->latestRelease();
+        if (!$release) return $update;
+        return ['id'=>'https://github.com/' . self::REPO, 'slug'=>self::SLUG, 'version'=>$release['version'],
+            'url'=>$release['url'], 'package'=>$release['package'], 'requires_php'=>'7.4'];
+    }
+    public function pluginInfo($result, $action, $args) {
+        if ($action !== 'plugin_information' || !is_object($args) || ($args->slug ?? '') !== self::SLUG) return $result;
+        $release = $this->latestRelease();
+        if (!$release) return $result;
+        $notes = $release['notes'] !== '' ? $release['notes'] : __('See the release page on GitHub.', 'smart-cat-grid');
+        return (object)['name'=>'Smart Categories Grid', 'slug'=>self::SLUG, 'version'=>$release['version'],
+            'author'=>'<a href="https://github.com/gemuzkm">TM</a>', 'homepage'=>'https://github.com/' . self::REPO,
+            'requires'=>'6.3', 'requires_php'=>'7.4', 'download_link'=>$release['package'],
+            'sections'=>['changelog'=>wpautop(esc_html($notes))]];
     }
 }
 SmartCategoriesGrid::getInstance();

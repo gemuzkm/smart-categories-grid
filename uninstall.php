@@ -25,3 +25,5 @@ if (is_multisite()) {
 } else {
     scg_uninstall_site();
 }
+// Cached answer of the release lookup used for update checks.
+delete_site_transient('scg_release');
