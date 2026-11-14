@@ -6,6 +6,7 @@ on:
       - 'assets/front.css'
       - 'assets/front.min.css'
       - '.github/tests/layout.py'
+      - '.github/scripts/build-css.js'
       - '.github/workflows/performance.yml'
   pull_request:
     branches: [main]
@@ -13,6 +14,7 @@ on:
       - 'assets/front.css'
       - 'assets/front.min.css'
       - '.github/tests/layout.py'
+      - '.github/scripts/build-css.js'
       - '.github/workflows/performance.yml'
   workflow_dispatch:
     inputs:
@@ -33,7 +35,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Rebuild production CSS
-        run: npx --yes clean-css-cli@5 -O1 -o assets/front.min.css assets/front.css
+        run: |
+          set -e
+          npx --yes clean-css-cli@5 -O1 -o assets/front.min.css assets/front.css
+          node .github/scripts/build-css.js "$RUNNER_TEMP/scg-css"
+          for style in classic modern minimal card text; do
+            npx --yes clean-css-cli@5 -O1 -o "assets/front-$style.min.css" "$RUNNER_TEMP/scg-css/front-$style.css"
+            test -s "assets/front-$style.min.css"
+          done
       - name: Install isolated browser test environment
         run: |
           python3 -m venv "$RUNNER_TEMP/scg-layout"
