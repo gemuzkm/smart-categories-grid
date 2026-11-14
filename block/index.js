@@ -2,28 +2,9 @@
 (function (wp) {
     'use strict';
     var el = wp.element.createElement, __ = wp.i18n.__, c = wp.components;
+    var useState = wp.element.useState, useEffect = wp.element.useEffect, useRef = wp.element.useRef;
     var INHERIT = __('Default (from settings)', 'smart-cat-grid');
-
-    function categoryOptions(records) {
-        var options = [{value: 0, label: INHERIT}];
-        if (!records) {
-            return options;
-        }
-        var byParent = {};
-        records.forEach(function (r) {
-            (byParent[r.parent] = byParent[r.parent] || []).push(r);
-        });
-        function walk(parent, depth) {
-            (byParent[parent] || [])
-                .sort(function (a, b) { return a.name.localeCompare(b.name); })
-                .forEach(function (r) {
-                    options.push({value: r.id, label: new Array(depth + 1).join('— ') + r.name});
-                    walk(r.id, depth + 1);
-                });
-        }
-        walk(0, 0);
-        return options;
-    }
+    var HEX = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
     function inheritOptions(pairs) {
         return [{value: '', label: INHERIT}].concat(pairs.map(function (p) {
@@ -35,6 +16,10 @@
         return String(value).replace(/[^0-9]/g, '');
     }
 
+    function categoryLabel(r) {
+        return r.name + ' (ID ' + r.id + ')';
+    }
+
     function emptyPlaceholder() {
         return el(c.Placeholder, {
             icon: 'grid-view',
@@ -43,9 +28,47 @@
         });
     }
 
+    // Theme palette limited to hex colours: the server accepts hex values only.
+    function useThemePalette() {
+        var be = wp.blockEditor;
+        var colors = be.useSettings ? be.useSettings('color.palette')[0] : be.useSetting('color.palette');
+        return (colors || []).filter(function (item) { return item && HEX.test(item.color || ''); });
+    }
+
+    // Searches categories on the server, 20 at a time, instead of loading the whole taxonomy.
+    function ParentPicker(props) {
+        var input = useState(''), term = useState('');
+        useEffect(function () {
+            var timer = setTimeout(function () { term[1](input[0]); }, 300);
+            return function () { clearTimeout(timer); };
+        }, [input[0]]);
+        var query = {per_page: 20, orderby: 'name', order: 'asc', hide_empty: false, _fields: 'id,name,parent'};
+        if (term[0]) {
+            query.search = term[0];
+        }
+        var found = wp.coreData.useEntityRecords('taxonomy', 'category', query);
+        var selected = wp.coreData.useEntityRecord('taxonomy', 'category', props.value || 0, {enabled: !!props.value});
+        var last = useRef([]);
+        if (found.records) {
+            last.current = found.records;
+        }
+        var options = last.current.map(function (r) { return {value: r.id, label: categoryLabel(r)}; });
+        if (props.value && selected.record && !options.some(function (o) { return o.value === props.value; })) {
+            options.unshift({value: props.value, label: categoryLabel(selected.record)});
+        }
+        return el(c.ComboboxControl, {
+            label: __('Parent category', 'smart-cat-grid'),
+            help: __('Type to search. Leave empty to use the default category from settings.', 'smart-cat-grid'),
+            value: props.value || null,
+            options: options,
+            onFilterValueChange: function (v) { input[1](v || ''); },
+            onChange: function (v) { props.onChange(parseInt(v, 10) || 0); }
+        });
+    }
+
     function Edit(props) {
         var a = props.attributes, set = props.setAttributes;
-        var cats = wp.coreData.useEntityRecords('taxonomy', 'category', {per_page: -1, hide_empty: false, _fields: 'id,name,parent'});
+        var palette = useThemePalette();
 
         var panelSource = el(c.PanelBody, {title: __('Source', 'smart-cat-grid'), initialOpen: true},
             el(c.ToggleControl, {
@@ -63,11 +86,9 @@
                 ],
                 onChange: function (v) { set({type: v}); }
             }),
-            !a.auto && a.type === 'subcategories' && el(c.SelectControl, {
-                label: __('Parent category', 'smart-cat-grid'),
+            !a.auto && a.type === 'subcategories' && el(ParentPicker, {
                 value: a.categoryId,
-                options: categoryOptions(cats.records),
-                onChange: function (v) { set({categoryId: parseInt(v, 10) || 0}); }
+                onChange: function (id) { set({categoryId: id}); }
             }),
             el(c.TextControl, {
                 label: __('Exclude category IDs', 'smart-cat-grid'),
@@ -136,12 +157,16 @@
                 value: a.imageRadius,
                 onChange: function (v) { set({imageRadius: digits(v)}); }
             }),
-            el(c.TextControl, {
-                label: __('Button color (hex)', 'smart-cat-grid'),
-                placeholder: '#b93434',
-                value: a.buttonColor,
-                onChange: function (v) { set({buttonColor: String(v).trim()}); }
-            })
+            el(c.BaseControl, {
+                label: __('Button color', 'smart-cat-grid'),
+                help: __('Clear the color to use the default from settings.', 'smart-cat-grid')
+            },
+                el(c.ColorPalette, {
+                    colors: palette,
+                    value: a.buttonColor || undefined,
+                    onChange: function (v) { set({buttonColor: v && HEX.test(v) ? v : ''}); }
+                })
+            )
         );
 
         var preview = a.auto
