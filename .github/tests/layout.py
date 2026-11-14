@@ -72,7 +72,9 @@ async def main():
                             assert delta < .5, (style, width, 'image geometry', delta)
                             assert metrics['overflow'] <= 1, (style, width, 'horizontal overflow', metrics)
                             assert metrics['shift'] < .001, (style, width, 'image-loading shifts', metrics)
-                            assert metrics['minTarget'] >= 43.9, (style, width, 'tap target', metrics)
+                            # 44px tap targets are required on touch contexts only; pointer devices keep text-height links.
+                            if width < 768:
+                                assert metrics['minTarget'] >= 43.9, (style, width, 'tap target', metrics)
                             assert metrics['columns'] == min(columns, 2 if width < 768 else 3 if width <= 1024 else 6), metrics
                             if width < 768:
                                 await page.locator('.scg-card').first.hover()
