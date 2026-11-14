@@ -6,15 +6,22 @@ $GLOBALS['options']=['scg_settings'=>['cache_time'=>86400]];
 $GLOBALS['transients']=[]; $GLOBALS['queries']=[]; $GLOBALS['head']=false;
 $GLOBALS['actions']=[]; $GLOBALS['updates']=0;
 $GLOBALS['site_transients']=[]; $GLOBALS['http']=null; $GLOBALS['http_calls']=0;
+$GLOBALS['done']=true; $GLOBALS['did']=[];
 function add_action(...$a) {} function register_activation_hook(...$a) {} function add_shortcode(...$a) {}
 function add_filter(...$a) {}
 function plugin_basename($f) {return 'smart-categories-grid/smart-categories-grid.php';}
+function plugin_dir_path($f) {return dirname($f).'/';}
+function plugins_url($p,$f) {return '/plugins/smart-categories-grid/'.$p;}
+function add_query_arg($k,$v,$u) {return $u.'?'.$k.'='.$v;}
+function apply_filters($h,$v,...$a) {return $v;}
+function doing_action($h) {return false;}
+function wp_register_style(...$a) {} function wp_style_add_data(...$a) {} function wp_enqueue_style(...$a) {}
 function get_site_transient($k) {return $GLOBALS['site_transients'][$k] ?? false;}
 function set_site_transient($k,$v,$t) {$GLOBALS['site_transients'][$k]=$v;}
 function wp_remote_get($u,$a=[]) {$GLOBALS['http_calls']++;return $GLOBALS['http'];}
 function wp_remote_retrieve_response_code($r) {return $r['code'];}
 function wp_remote_retrieve_body($r) {return $r['body'];}
-function did_action($h) {return 0;}
+function did_action($h) {return $GLOBALS['did'][$h] ?? 0;}
 function do_action($h,...$a) {$GLOBALS['actions'][]=$h;}
 function get_option($k,$d=false) {return $GLOBALS['options'][$k] ?? $d;}
 function update_option($k,$v,$a=null) {$GLOBALS['options'][$k]=$v;$GLOBALS['updates']++;}
@@ -29,7 +36,7 @@ function sanitize_hex_color($v) {return preg_match('/^#([0-9a-f]{3}|[0-9a-f]{6})
 function esc_attr($v) {return htmlspecialchars((string)$v,ENT_QUOTES);}
 function esc_html($v) {return esc_attr($v);} function esc_url($v) {return esc_attr($v);}
 function esc_html__($v,$d) {return $v;}
-function wp_style_is($h,$s) {return true;}
+function wp_style_is($h,$s) {return $GLOBALS['done'];}
 function get_block_wrapper_attributes() {return 'class="wp-block"';}
 function get_terms($a) {
     $GLOBALS['queries'][]=$a;
@@ -91,5 +98,19 @@ check($p->checkForUpdate(false,[],'other/other.php')===false,'other plugins are 
 $GLOBALS['site_transients']=[];
 $GLOBALS['http']=['code'=>200,'body'=>json_encode(['tag_name'=>'v2.9.0','assets'=>[['browser_download_url'=>'https://example.com/smart-categories-grid-2.9.0.zip']]])];
 check($p->checkForUpdate(false,[],$f)===false,'packages outside the repository releases are rejected');
+// Stylesheet selection: a grid rendered after wp_head prints a link to its stylesheet.
+$GLOBALS['done']=false;$GLOBALS['did']['wp_head']=1;
+$t=dirname(__DIR__,2).'/assets/front-text.min.css';$had=is_file($t);
+if($had)rename($t,$t.'.bak');
+clearstatcache();
+$late=$p->renderGrid($a);
+check(strpos($late,'<link rel="stylesheet"')===0 && strpos($late,'assets/front.min.css')!==false,'late render falls back to the full stylesheet when the per-style file is missing');
+file_put_contents($t,'.scg-grid{display:grid}');
+clearstatcache();
+$late=$p->renderGrid($a);
+check(strpos($late,'assets/front-text.min.css')!==false,'late render links the stylesheet of the grid style');
+unlink($t);if($had)rename($t.'.bak',$t);
+clearstatcache();
+$GLOBALS['done']=true;$GLOBALS['did']=[];
 $GLOBALS['empty']=true;check($p->renderGrid($a)==='','empty result');
 echo "Renderer/cache fixtures passed\n";

@@ -2,6 +2,8 @@
 <ruleset name="Smart Categories Grid">
     <description>WordPress coding standards for the plugin's PHP files. Kept in .github so it is not shipped in the release ZIP.</description>
 
+    <!-- Changing this file re-runs the Format PHP workflow on feature branches. -->
+
     <arg name="extensions" value="php"/>
     <arg name="colors"/>
     <arg value="sp"/>
