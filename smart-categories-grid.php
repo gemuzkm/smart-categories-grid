@@ -100,7 +100,10 @@ class SmartCategoriesGrid {
             'imageRadius'=>'image_radius','buttonColor'=>'button_color','showViewAll'=>'show_view_all',
             'hideEmpty'=>'hide_empty','auto'=>'auto','type'=>'type','exclude'=>'exclude',
             'limit'=>'limit','columns'=>'columns','style'=>'style'] as $from=>$to) {
-            if (isset($a[$from])) $atts[$to] = is_bool($a[$from]) ? ($a[$from] ? 'true' : 'false') : $a[$from];
+            if (!isset($a[$from])) continue;
+            // 0 is the block's "Default (from settings)" choice, not an explicit parent.
+            if ($from === 'categoryId' && !absint($a[$from])) continue;
+            $atts[$to] = is_bool($a[$from]) ? ($a[$from] ? 'true' : 'false') : $a[$from];
         }
         $html = $this->renderGrid($atts);
         return $html === '' ? '' : '<div ' . get_block_wrapper_attributes() . '>' . $html . '</div>';
@@ -256,7 +259,7 @@ class SmartCategoriesGrid {
             if ($image) {
                 $lazy = wp_lazy_loading_enabled('img', 'scg_grid') && $index >= $v['columns'];
                 $html .= '<a class="scg-image" href="' . esc_url($link) . '" tabindex="-1" aria-hidden="true" style="text-decoration:none;border:0;box-shadow:none">';
-                $html .= '<img src="' . esc_url($image['src']) . '" alt="" width="120" height="96" decoding="async"';
+                $html .= '<img src="' . esc_url($image['src']) . '" alt="' . esc_attr($cat->name) . '" width="120" height="96" decoding="async"';
                 if ($image['srcset']) $html .= ' srcset="' . esc_attr($image['srcset']) . '"';
                 if ($lazy) $html .= ' loading="lazy"';
                 $html .= '></a>';
