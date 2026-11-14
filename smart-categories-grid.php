@@ -25,6 +25,8 @@ class SmartCategoriesGrid {
     private array $settings = [];
     private array $images = [];
     private ?string $placeholder = null;
+    private ?string $gen = null;
+    private bool $genScheduled = false;
     private static ?self $instance = null;
 
     public static function getInstance(): self {
@@ -59,8 +61,8 @@ class SmartCategoriesGrid {
             'update_option_sidebars_widgets','switch_theme'] as $hook) {
             add_action($hook, [$this, 'clearWidgetCache']);
         }
-        add_action('edit_attachment', [$this, 'clearAllCache']);
-        add_action('delete_attachment', [$this, 'clearAllCache']);
+        add_action('edit_attachment', [$this, 'onAttachmentChange']);
+        add_action('delete_attachment', [$this, 'onAttachmentChange']);
     }
     public function addImageSizes(): void {
         add_image_size('scg-thumb', 120, 96, true);
@@ -162,10 +164,34 @@ class SmartCategoriesGrid {
     public function onTermMetaChange($id, $term, $key): void {
         if ($key === 'logo') $this->clearAllCache();
     }
+    public function onAttachmentChange($id): void {
+        $id = absint($id);
+        if (!$id) return;
+        // Only images shown in grids matter: the default image or a category logo.
+        $used = $id === absint($this->settings['default_image_id'] ?? 0);
+        if (!$used) {
+            $terms = get_terms(['taxonomy'=>'category','hide_empty'=>false,'fields'=>'ids','number'=>1,
+                'meta_key'=>'logo','meta_value'=>(string)$id,'update_term_meta_cache'=>false]);
+            $used = !is_wp_error($terms) && !empty($terms);
+        }
+        if ($used) $this->clearAllCache();
+    }
     public function clearAllCache(): void {
-        // Unique tokens avoid lost-increment races between simultaneous edits.
-        update_option('scg_cache_gen', wp_generate_uuid4(), true);
+        // The new token applies to this request at once and is stored once, at shutdown,
+        // however many changes the request makes. Unique tokens avoid lost-increment races.
+        $this->gen = wp_generate_uuid4();
         $this->images = [];
+        if ($this->genScheduled) return;
+        $this->genScheduled = true;
+        if (did_action('shutdown')) $this->persistCacheGeneration();
+        else add_action('shutdown', [$this, 'persistCacheGeneration'], 0);
+    }
+    public function persistCacheGeneration(): void {
+        if (!$this->genScheduled) return;
+        $this->genScheduled = false;
+        update_option('scg_cache_gen', (string)$this->gen, true);
+        // Fires once per request after grid caches were invalidated; page-cache integrations can purge here.
+        do_action('scg_cache_cleared');
     }
     private function currentCategory(): int {
         if (is_category()) return absint(get_queried_object_id());
@@ -222,7 +248,7 @@ class SmartCategoriesGrid {
         $bypass = !$ttl || filter_var($this->setting($a, 'force_update', false), FILTER_VALIDATE_BOOLEAN);
         // One stable key per configuration: the generation token is stored inside the entry,
         // so an invalidation overwrites the entry instead of leaving an orphaned transient.
-        $gen = (string)get_option('scg_cache_gen', '1');
+        $gen = $this->gen ?? (string)get_option('scg_cache_gen', '1');
         $key = 'scg_cache_' . md5(wp_json_encode([$v, self::VERSION, get_locale()]));
         $cached = $bypass ? false : get_transient($key);
         $html = is_array($cached) && isset($cached['html'], $cached['gen']) && $cached['gen'] === $gen ? (string)$cached['html'] : null;
