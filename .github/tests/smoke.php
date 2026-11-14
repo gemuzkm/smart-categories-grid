@@ -61,8 +61,11 @@ $p->onTermCacheClean([1],'category');$p->onTermCacheClean([2],'category');$p->pe
 check($GLOBALS['updates']===1 && isset($GLOBALS['options']['scg_cache_gen']) && $GLOBALS['actions']===['scg_cache_cleared'],'several invalidations in one request are stored once');
 $p->renderGrid(array_merge($a,['hide_empty'=>'false']));
 check(count($GLOBALS['queries'])===3,'hide_empty changes the cache key');
-$p->renderGrid(array_merge($a,['force_update'=>'true']));
-check(count($GLOBALS['queries'])===4,'force update bypasses cache');
+$p->renderGrid(array_merge($a,['hide_empty'=>'false','force_update'=>'true']));
+check(count($GLOBALS['queries'])===3,'force_update is ignored without WP_DEBUG');
+define('WP_DEBUG', true);
+$p->renderGrid(array_merge($a,['hide_empty'=>'false','force_update'=>'true']));
+check(count($GLOBALS['queries'])===4,'force_update bypasses cache under WP_DEBUG');
 $GLOBALS['options']['scg_settings']=['cache_time'=>0];$p->init();
 $p->renderGrid($a);$p->renderGrid($a);
 check(count($GLOBALS['queries'])===6,'disabled caching bypasses reads');

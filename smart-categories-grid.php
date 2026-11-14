@@ -250,7 +250,9 @@ class SmartCategoriesGrid {
             'hide'=>filter_var($this->setting($a, 'hide_empty', false), FILTER_VALIDATE_BOOLEAN),
         ];
         $ttl = min(WEEK_IN_SECONDS, absint($s['cache_time'] ?? DAY_IN_SECONDS));
-        $bypass = !$ttl || filter_var($this->setting($a, 'force_update', false), FILTER_VALIDATE_BOOLEAN);
+        // force_update is a debugging aid: it is honoured only while WP_DEBUG is on.
+        $force = defined('WP_DEBUG') && WP_DEBUG && filter_var($this->setting($a, 'force_update', false), FILTER_VALIDATE_BOOLEAN);
+        $bypass = !$ttl || $force;
         // One stable key per configuration: the generation token is stored inside the entry,
         // so an invalidation overwrites the entry instead of leaving an orphaned transient.
         $gen = $this->gen ?? (string)get_option('scg_cache_gen', '1');
