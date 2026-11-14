@@ -25,7 +25,7 @@ A local 80-case run against the 2.4.1 stylesheet passed every threshold: image-r
 
 ## Automated checks
 
-The Layout and Lighthouse checks workflow rebuilds production CSS and runs the fixture in Chromium on relevant pushes and pull requests. Its report is uploaded as an artifact. The layout job has not yet completed successfully on GitHub; treat its result as unconfirmed until a green run exists. The existing Build assets workflow continues committing clean-css output to main; Release rebuilds it again before packaging.
+The Layout and Lighthouse checks workflow rebuilds production CSS and runs the fixture in Chromium on relevant pushes and pull requests. Its report is uploaded as an artifact. The layout job runs on a pinned ubuntu-24.04 image with Python 3.12; its first successful run on GitHub was on the 2.4.1 pull request. The existing Build assets workflow continues committing clean-css output to main; Release rebuilds it again before packaging.
 
 To run the same fixture locally, install Playwright 1.51.0 and its Chromium browser, then run `python .github/tests/layout.py`.
 
