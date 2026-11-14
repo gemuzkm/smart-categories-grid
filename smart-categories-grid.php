@@ -76,15 +76,20 @@ class SmartCategoriesGrid {
     private function styleFile(): string {
         return defined('SCRIPT_DEBUG') && SCRIPT_DEBUG ? 'assets/front.css' : 'assets/front.min.css';
     }
+    // The file time changes the asset URL whenever a file is replaced, even if the version number is not.
+    private function assetVersion(string $file): string {
+        $path = plugin_dir_path(__FILE__) . $file;
+        return is_file($path) ? self::VERSION . '.' . filemtime($path) : self::VERSION;
+    }
     public function registerAssets(): void {
         load_plugin_textdomain('smart-cat-grid', false, dirname(plugin_basename(__FILE__)) . '/languages');
-        wp_register_style('scg-front', plugins_url($this->styleFile(), __FILE__), [], self::VERSION);
+        wp_register_style('scg-front', plugins_url($this->styleFile(), __FILE__), [], $this->assetVersion($this->styleFile()));
         if (apply_filters('scg_inline_styles', true)) {
             wp_style_add_data('scg-front', 'path', plugin_dir_path(__FILE__) . $this->styleFile());
         }
         if (is_admin()) {
             wp_register_script('scg-block-editor', plugins_url('block/index.js', __FILE__),
-                ['wp-blocks','wp-element','wp-block-editor','wp-components','wp-i18n','wp-core-data','wp-server-side-render'], self::VERSION, true);
+                ['wp-blocks','wp-element','wp-block-editor','wp-components','wp-i18n','wp-core-data','wp-server-side-render'], $this->assetVersion('block/index.js'), true);
             wp_set_script_translations('scg-block-editor', 'smart-cat-grid', plugin_dir_path(__FILE__) . 'languages');
         }
     }
@@ -146,7 +151,7 @@ class SmartCategoriesGrid {
         if (wp_style_is('scg-front', 'done')) return '';
         if (did_action('wp_head') && !doing_action('wp_head') && apply_filters('scg_print_late_styles', true)) {
             // Do not mark as done: this render may be discarded by an excerpt/SEO filter.
-            return '<link rel="stylesheet" href="' . esc_url(add_query_arg('ver', self::VERSION, plugins_url($this->styleFile(), __FILE__))) . '" media="all">';
+            return '<link rel="stylesheet" href="' . esc_url(add_query_arg('ver', $this->assetVersion($this->styleFile()), plugins_url($this->styleFile(), __FILE__))) . '" media="all">';
         }
         wp_enqueue_style('scg-front');
         return '';
@@ -215,12 +220,15 @@ class SmartCategoriesGrid {
         ];
         $ttl = min(WEEK_IN_SECONDS, absint($s['cache_time'] ?? DAY_IN_SECONDS));
         $bypass = !$ttl || filter_var($this->setting($a, 'force_update', false), FILTER_VALIDATE_BOOLEAN);
-        $key = 'scg_cache_' . md5(wp_json_encode([$v, self::VERSION, get_locale(), get_option('scg_cache_gen', '1')]));
+        // One stable key per configuration: the generation token is stored inside the entry,
+        // so an invalidation overwrites the entry instead of leaving an orphaned transient.
+        $gen = (string)get_option('scg_cache_gen', '1');
+        $key = 'scg_cache_' . md5(wp_json_encode([$v, self::VERSION, get_locale()]));
         $cached = $bypass ? false : get_transient($key);
-        $html = is_array($cached) && isset($cached['html']) ? (string)$cached['html'] : null;
+        $html = is_array($cached) && isset($cached['html'], $cached['gen']) && $cached['gen'] === $gen ? (string)$cached['html'] : null;
         if ($html === null) {
             $html = $this->generate($v);
-            if (!$bypass) set_transient($key, ['html'=>$html], $ttl);
+            if (!$bypass) set_transient($key, ['html'=>$html, 'gen'=>$gen], $ttl);
         }
         return $html === '' ? '' : $this->styles() . $html;
     }
@@ -395,8 +403,8 @@ class SmartCategoriesGrid {
         if ($hook !== 'settings_page_scg-settings') return;
         wp_enqueue_media();
         wp_enqueue_style('wp-color-picker');
-        wp_enqueue_style('scg-admin', plugins_url('assets/admin.css', __FILE__), [], self::VERSION);
-        wp_enqueue_script('scg-admin', plugins_url('assets/admin.js', __FILE__), ['jquery','wp-color-picker','wp-a11y'], self::VERSION, true);
+        wp_enqueue_style('scg-admin', plugins_url('assets/admin.css', __FILE__), [], $this->assetVersion('assets/admin.css'));
+        wp_enqueue_script('scg-admin', plugins_url('assets/admin.js', __FILE__), ['jquery','wp-color-picker','wp-a11y'], $this->assetVersion('assets/admin.js'), true);
         wp_localize_script('scg-admin','scg_admin',['nonce'=>wp_create_nonce('scg-clear-cache'),'ajax_url'=>admin_url('admin-ajax.php'),'i18n'=>[
             'clear_confirm'=>__('Are you sure?', 'smart-cat-grid'),'clearing'=>__('Clearing...', 'smart-cat-grid'),
             'clear_cache'=>__('Clear Cache', 'smart-cat-grid'),'upload_title'=>__('Select Image', 'smart-cat-grid'),
