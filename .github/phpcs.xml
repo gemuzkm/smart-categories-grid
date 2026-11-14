@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<ruleset name="Smart Categories Grid">
+    <description>WordPress coding standards for the plugin's PHP files. Kept in .github so it is not shipped in the release ZIP.</description>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <config name="minimum_wp_version" value="6.3"/>
+
+    <rule ref="WordPress"/>
+
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="smart-cat-grid"/>
+            </property>
+        </properties>
+    </rule>
+</ruleset>
